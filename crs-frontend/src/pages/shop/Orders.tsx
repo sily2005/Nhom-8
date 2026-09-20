@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   CheckCircle2,
@@ -86,7 +86,7 @@ const statusConfig: Record<
 }
 
 export function Orders() {
-  const { orders, ordersLoading, refreshOrders, addToCart, user, cancelOrder } = useApp()
+  const { orders, ordersLoading, refreshOrders, addToCart, user, cancelOrder, setCartDrawerOpen } = useApp()
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null)
   const [cancelModalOrder, setCancelModalOrder] = useState<Order | null>(null)
   const [payingOrderId, setPayingOrderId] = useState<string | number | null>(null)
@@ -144,8 +144,6 @@ export function Orders() {
     'all' | 'pending' | 'shipping' | 'delivered' | 'cancelled'
   >('all')
 
-  const navigate = useNavigate()
-
   const filteredOrders = orders.filter((order) => {
     if (statusFilter === 'all') return true
     if (statusFilter === 'pending')
@@ -190,7 +188,7 @@ export function Orders() {
       `Đã thêm ${order.itemsList.length} sản phẩm của đơn ${order.id} vào giỏ hàng!`
     )
     setSelectedOrder(null)
-    navigate('/cart')
+    setCartDrawerOpen(true)
   }
 
 

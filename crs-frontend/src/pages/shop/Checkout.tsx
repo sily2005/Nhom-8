@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import {
   ArrowRight,
   Check,
@@ -23,8 +23,6 @@ import {
 } from '../../services/shipping'
 import type { Address, Order } from '../../types'
 
-const ESTIMATED_WEIGHT = 200
-
 export function Checkout() {
   const {
     cart,
@@ -33,8 +31,9 @@ export function Checkout() {
     removeCoupon,
     addOrder,
     refreshOrders,
-    clearCart,
+    removePurchasedItems,
     user,
+    setCartDrawerOpen,
   } = useApp()
 
   const navigate = useNavigate()
@@ -53,9 +52,10 @@ export function Checkout() {
 
     if (itemsToCheckout.length === 0) {
       toast.error('Giỏ hàng trống! Vui lòng chọn sản phẩm trước khi thanh toán.')
-      navigate('/cart')
+      setCartDrawerOpen(true)
+      navigate('/shop')
     }
-  }, [user, itemsToCheckout.length, navigate])
+  }, [user, itemsToCheckout.length, navigate, setCartDrawerOpen])
 
   // Address State
   const [selectedAddress, setSelectedAddress] = useState<Address | null>(
@@ -79,9 +79,9 @@ export function Checkout() {
   const [couponModalOpen, setCouponModalOpen] = useState(false)
   const [submitting, setSubmitting] = useState(false)
 
-  // Tính phí ship GHN
+  // Tính phí ship GHN khớp chuẩn bảng giá cước vận chuyển của GHN
   const calculateFeeForAddress = useCallback(
-    async (addr: Address | null, subtotal: number) => {
+    async (addr: Address | null, _subtotal: number) => {
       if (!addr || !addr.province?.trim() || !addr.district?.trim() || !addr.ward?.trim()) {
         setGhnShippingFee(null)
         return
@@ -97,15 +97,17 @@ export function Checkout() {
           return
         }
 
+        const totalWeight = Math.max(300, itemsToCheckout.reduce((sum, item) => sum + ((item.quantity || 1) * 300), 0))
+
         const feeData = await calculateShippingFee({
           to_district_id: locationIds.districtId,
           to_ward_code: locationIds.wardCode,
-          weight: ESTIMATED_WEIGHT,
-          insurance_value: subtotal,
+          weight: totalWeight,
+          insurance_value: 0, // Cước vận chuyển chuẩn GHN, không cộng dồn phụ phí bảo hiểm
         })
 
         if (feeData && typeof feeData.total === 'number') {
-          setGhnShippingFee(feeData.total)
+          setGhnShippingFee(feeData.service_fee ?? feeData.total)
         } else {
           setGhnShippingFee(null)
         }
@@ -116,7 +118,7 @@ export function Checkout() {
         setCalculatingFee(false)
       }
     },
-    []
+    [itemsToCheckout]
   )
 
   useEffect(() => {
@@ -240,7 +242,7 @@ export function Checkout() {
         const createResult = await apiCreateOrder({
           name: selectedAddress.fullName,
           phone: formattedPhone,
-          address: selectedAddress.street || fullAddress,
+          address: fullAddress,
           to_district_id: finalDistrictId,
           to_ward_code: finalWardCode,
           payment_method: paymentMethod, // 'cod' hoặc 'momo'
@@ -289,6 +291,11 @@ export function Checkout() {
     }
 
 
+    // Xóa ngay các sản phẩm đã đặt mua khỏi giỏ hàng
+    removePurchasedItems(itemsToCheckout)
+    addOrder(newOrder)
+    setSubmitting(false)
+
     if (isMoMo) {
       if (momoRedirectUrl) {
         toast.success('Đang chuyển hướng tới cổng thanh toán MoMo...', { duration: 3000 })
@@ -308,10 +315,6 @@ export function Checkout() {
       })
       navigate('/orders')
     }
-
-    addOrder(newOrder)
-    setSubmitting(false)
-    clearCart()
   }
 
   if (!user) return null
@@ -321,12 +324,16 @@ export function Checkout() {
     <section className="min-h-screen bg-[#0B0E17] px-5 py-10 text-white lg:px-8">
       <div className="mx-auto max-w-7xl">
         <div className="mb-6 flex items-center justify-between">
-          <Link
-            to="/cart"
+          <button
+            type="button"
+            onClick={() => {
+              setCartDrawerOpen(true)
+              navigate('/shop')
+            }}
             className="inline-flex items-center gap-2 text-xs font-bold text-slate-400 transition hover:text-white"
           >
             <ChevronLeft size={16} /> Quay lại giỏ hàng
-          </Link>
+          </button>
 
           <span className="text-[11px] font-mono text-lime-400 font-bold flex items-center">
             <ShieldCheck size={14} className="inline mr-1" /> SECURE CHECKOUT · GHN & MOMO

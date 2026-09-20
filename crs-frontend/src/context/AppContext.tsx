@@ -79,6 +79,7 @@ type AppContextValue = {
   toggleCartItem: (cartItemId: string) => void
   toggleSelectAll: () => void
   updateCartVariant: (cartItemId: string, size: string, color: string) => void
+  removePurchasedItems: (items: Array<{ id: number; selectedSize?: string; selectedColor?: string; cartItemId?: string }>) => void
   clearCart: () => void
   cartCount: number
   cartSubtotal: number
@@ -525,9 +526,36 @@ export function AppProvider({ children }: { children: ReactNode }) {
     toast.success('Đã cập nhật phân loại sản phẩm')
   }
 
+  const removePurchasedItems = (items: Array<{ id: number; selectedSize?: string; selectedColor?: string; cartItemId?: string }>) => {
+    setCart((current) => {
+      const remaining = current.filter((cartItem) => {
+        const isPurchased = items.some((item) => {
+          if (item.cartItemId && item.cartItemId === cartItem.cartItemId) return true
+          const sameId = Number(item.id) === Number(cartItem.id)
+          const sameSize = !item.selectedSize || String(item.selectedSize).trim() === String(cartItem.selectedSize).trim()
+          const sameColor = !item.selectedColor || String(item.selectedColor).trim() === String(cartItem.selectedColor).trim()
+          return sameId && sameSize && sameColor
+        })
+        return !isPurchased
+      })
+      try {
+        localStorage.setItem(cartKeyRef.current, JSON.stringify(remaining))
+      } catch { /* ignore */ }
+      return remaining
+    })
+    setAppliedCoupon(null)
+    try {
+      localStorage.removeItem('crs_coupon')
+    } catch { /* ignore */ }
+  }
+
   const clearCart = () => {
     setCart([])
     setAppliedCoupon(null)
+    try {
+      localStorage.setItem(cartKeyRef.current, JSON.stringify([]))
+      localStorage.removeItem('crs_coupon')
+    } catch { /* ignore */ }
   }
 
   const selectedCartItems = cart.filter((item) => item.selected !== false)
@@ -638,6 +666,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     toggleCartItem,
     toggleSelectAll,
     updateCartVariant,
+    removePurchasedItems,
     clearCart,
     cartCount,
     cartSubtotal,

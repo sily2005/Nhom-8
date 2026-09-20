@@ -166,7 +166,7 @@ class OrderController extends Controller
                 // 3. Create Order Record
                 $orderNumber = 'ORD-' . now()->format('Ymd') . '-' . Str::upper(Str::random(6));
                 $shippingName = $validated['name'] ?? $validated['shipping_name'] ?? 'Khách hàng';
-                $shippingAddress = $validated['address'] ?? $validated['shipping_address'] ?? '';
+                $shippingAddress = $validated['shipping_address'] ?? $validated['address'] ?? '';
                 $order = Order::create([
                     'user_id' => $userId,
                     'order_number' => $orderNumber,
@@ -175,6 +175,8 @@ class OrderController extends Controller
                     'shipping_name' => $shippingName,
                     'shipping_phone' => $validated['phone'],
                     'shipping_address' => $shippingAddress,
+                    'to_district_id' => !empty($validated['to_district_id']) ? (int) $validated['to_district_id'] : null,
+                    'to_ward_code' => !empty($validated['to_ward_code']) ? (string) $validated['to_ward_code'] : null,
                     'phone' => $validated['phone'],
                     'subtotal' => $subtotal,
                     'shipping_fee' => $shippingFee,

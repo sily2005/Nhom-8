@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import {
   Star,
   ShoppingBag,
@@ -10,7 +10,7 @@ import {
   RotateCcw,
   Check,
   ChevronRight,
-  Heart,
+  ChevronLeft,
   Share2,
   Minus,
   Plus,
@@ -26,6 +26,27 @@ import { fetchReviews } from '../../services/reviews'
 import { ProductCard } from '../../components/ProductCard'
 import type { Product, Review } from '../../types'
 
+const normalizeProduct = (p: any): Product => {
+  const categoryName = typeof p.category === 'object' && p.category !== null ? (p.category.name ?? 'Khác') : (p.category ?? 'Khác')
+  const brandName = typeof p.brand === 'object' && p.brand !== null ? (p.brand.name ?? 'STRIKER') : (p.brand ?? 'STRIKER')
+
+  return {
+    ...p,
+    id: Number(p.id),
+    name: p.name ?? '',
+    price: Number(p.price ?? 0),
+    oldPrice: p.oldPrice || p.old_price ? Number(p.oldPrice || p.old_price) : undefined,
+    category: categoryName,
+    brand: brandName,
+    stock: Number(p.stock ?? 0),
+    image: p.image || (Array.isArray(p.images) ? p.images[0] : '') || p.image_url || '',
+    images: Array.isArray(p.images) && p.images.length > 0 ? p.images : ((p.image || p.image_url) ? [p.image || p.image_url] : []),
+    sizes: Array.isArray(p.sizes) && p.sizes.length > 0 ? p.sizes : (p.variants ? [...new Set(p.variants.map((v: any) => v.attributes?.size).filter(Boolean))] : ['Standard']),
+    colors: Array.isArray(p.colors) && p.colors.length > 0 ? p.colors : (p.variants ? [...new Set(p.variants.map((v: any) => v.attributes?.color).filter(Boolean))] : ['Standard']),
+    variants: Array.isArray(p.variants) ? p.variants : [],
+  }
+}
+
 export function ProductDetail() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
@@ -34,13 +55,17 @@ export function ProductDetail() {
   const [product, setProduct] = useState<Product | null>(null)
   const [relatedProducts, setRelatedProducts] = useState<Product[]>([])
   const [loading, setLoading] = useState(true)
-  const [selectedImage, setSelectedImage] = useState<string>('')
+  
+  // Gallery state with auto-slide
+  const [currentImageIndex, setCurrentImageIndex] = useState(0)
+  const [isGalleryPaused, setIsGalleryPaused] = useState(false)
+
+  // Selection states
   const [selectedSize, setSelectedSize] = useState<string>('')
   const [selectedColor, setSelectedColor] = useState<string>('')
   const [quantity, setQuantity] = useState<number>(1)
   const [activeTab, setActiveTab] = useState<'description' | 'specs' | 'shipping' | 'reviews'>('description')
   const [added, setAdded] = useState(false)
-  const [isWishlisted, setIsWishlisted] = useState(false)
   const [reviews, setReviews] = useState<Review[]>([])
 
   useEffect(() => {
@@ -52,8 +77,9 @@ export function ProductDetail() {
 
       try {
         const apiData = await fetchProducts({ per_page: 100 })
-        const list: any[] = Array.isArray(apiData) ? apiData : (apiData?.data ?? [])
-        if (Array.isArray(list)) {
+        const rawList: any[] = Array.isArray(apiData) ? apiData : (apiData?.data ?? [])
+        if (Array.isArray(rawList)) {
+          const list = rawList.map(normalizeProduct)
           found = list.find((p: Product) => String(p.id) === String(id) || (p as any).slug === id)
           if (found) {
             const related = list
@@ -71,7 +97,7 @@ export function ProductDetail() {
       if (isMounted) {
         if (found) {
           setProduct(found)
-          setSelectedImage(found.image || (found.images && found.images[0]) || '')
+          setCurrentImageIndex(0)
           setSelectedSize(found.sizes?.[0] || '')
           setSelectedColor(found.colors?.[0] || '')
 
@@ -98,6 +124,87 @@ export function ProductDetail() {
       isMounted = false
     }
   }, [id])
+
+  // Images list
+  const imagesList = useMemo(() => {
+    if (!product) return []
+    const imgs = product.images && product.images.length > 0 ? product.images : [product.image]
+    return imgs.filter(Boolean)
+  }, [product])
+
+  // Auto-slide gallery every 4 seconds
+  useEffect(() => {
+    if (imagesList.length <= 1 || isGalleryPaused) return
+    const timer = setInterval(() => {
+      setCurrentImageIndex((prev) => (prev + 1) % imagesList.length)
+    }, 4000)
+    return () => clearInterval(timer)
+  }, [imagesList.length, isGalleryPaused])
+
+  const handlePrevImage = () => {
+    setCurrentImageIndex((prev) => (prev === 0 ? imagesList.length - 1 : prev - 1))
+  }
+
+  const handleNextImage = () => {
+    setCurrentImageIndex((prev) => (prev + 1) % imagesList.length)
+  }
+
+  // Variant matching
+  const currentVariant = useMemo(() => {
+    if (!product?.variants || product.variants.length === 0) return null
+    return (
+      product.variants.find((v) => {
+        const vSize = String(v.attributes?.size ?? '').trim().toLowerCase()
+        const vColor = String(v.attributes?.color ?? '').trim().toLowerCase()
+        const sSize = String(selectedSize).trim().toLowerCase()
+        const sColor = String(selectedColor).trim().toLowerCase()
+        return (vSize === sSize || !sSize) && (vColor === sColor || !sColor)
+      }) || null
+    )
+  }, [product, selectedSize, selectedColor])
+
+  // Current stock based on selected variant
+  const currentVariantStock = useMemo(() => {
+    if (currentVariant != null) {
+      return Number(currentVariant.stock) || 0
+    }
+    return Number(product?.stock) || 0
+  }, [currentVariant, product?.stock])
+
+  const isOutOfStock = currentVariantStock <= 0
+
+  // Helper to check stock of a specific size with currently selected color
+  const getSizeStock = (size: string) => {
+    if (!product?.variants || product.variants.length === 0) return product?.stock ?? 10
+    const v = product.variants.find((item) => {
+      const vSize = String(item.attributes?.size ?? '').trim().toLowerCase()
+      const vColor = String(item.attributes?.color ?? '').trim().toLowerCase()
+      const sColor = String(selectedColor).trim().toLowerCase()
+      return vSize === size.trim().toLowerCase() && (vColor === sColor || !sColor)
+    })
+    return v ? Number(v.stock) || 0 : 0
+  }
+
+  // Helper to check stock of a specific color with currently selected size
+  const getColorStock = (color: string) => {
+    if (!product?.variants || product.variants.length === 0) return product?.stock ?? 10
+    const v = product.variants.find((item) => {
+      const vSize = String(item.attributes?.size ?? '').trim().toLowerCase()
+      const vColor = String(item.attributes?.color ?? '').trim().toLowerCase()
+      const sSize = String(selectedSize).trim().toLowerCase()
+      return vColor === color.trim().toLowerCase() && (vSize === sSize || !sSize)
+    })
+    return v ? Number(v.stock) || 0 : 0
+  }
+
+  // Adjust quantity whenever stock updates
+  useEffect(() => {
+    if (isOutOfStock) {
+      setQuantity(1)
+    } else if (quantity > currentVariantStock) {
+      setQuantity(Math.max(1, currentVariantStock))
+    }
+  }, [currentVariantStock, isOutOfStock])
 
   if (loading) {
     return (
@@ -141,19 +248,25 @@ export function ProductDetail() {
       ? Math.round(((product.oldPrice - product.price) / product.oldPrice) * 100)
       : null
 
-  const imagesList = product.images && product.images.length > 0 ? product.images : [product.image]
-
   const handleAddToCart = () => {
+    if (isOutOfStock) {
+      toast.error(`Phân loại (Size ${selectedSize} · Màu ${selectedColor}) hiện đã hết hàng!`)
+      return
+    }
     addToCart(product, quantity, {
       size: selectedSize || product.sizes?.[0] || 'Standard',
       color: selectedColor || product.colors?.[0] || 'Standard',
     })
     setAdded(true)
-    toast.success(`Đã thêm ${quantity} x ${product.name} vào giỏ hàng!`)
+    toast.success(`Đã thêm ${quantity} x ${product.name} (Size ${selectedSize} · ${selectedColor}) vào giỏ hàng!`)
     setTimeout(() => setAdded(false), 2000)
   }
 
   const handleBuyNow = () => {
+    if (isOutOfStock) {
+      toast.error(`Phân loại (Size ${selectedSize} · Màu ${selectedColor}) hiện đã hết hàng!`)
+      return
+    }
     addToCart(product, quantity, {
       size: selectedSize || product.sizes?.[0] || 'Standard',
       color: selectedColor || product.colors?.[0] || 'Standard',
@@ -193,15 +306,15 @@ export function ProductDetail() {
 
         {/* Product Main Container */}
         <div className="grid gap-10 lg:grid-cols-12 lg:gap-12">
-          {/* Left Column: Gallery */}
+          {/* Left Column: Gallery with Auto-slide and Navigation Arrows */}
           <div className="lg:col-span-7 space-y-4">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.98 }}
-              animate={{ opacity: 1, scale: 1 }}
-              className="relative aspect-square w-full overflow-hidden rounded-3xl border border-white/10 bg-slate-900/80 backdrop-blur-xl shadow-2xl"
+            <div
+              className="relative aspect-square w-full overflow-hidden rounded-3xl border border-white/10 bg-slate-900/80 backdrop-blur-xl shadow-2xl group"
+              onMouseEnter={() => setIsGalleryPaused(true)}
+              onMouseLeave={() => setIsGalleryPaused(false)}
             >
               {/* Product Badges */}
-              <div className="absolute top-5 left-5 z-10 flex flex-col gap-2">
+              <div className="absolute top-5 left-5 z-20 flex flex-col gap-2">
                 {product.tag && (
                   <span className="rounded-full bg-lime-400 px-3.5 py-1 text-xs font-black uppercase tracking-wider text-slate-950 shadow-lg">
                     {product.tag}
@@ -214,33 +327,65 @@ export function ProductDetail() {
                 )}
               </div>
 
-              {/* Wishlist & Share buttons */}
-              <div className="absolute top-5 right-5 z-10 flex gap-2">
-                <button
-                  onClick={() => {
-                    setIsWishlisted(!isWishlisted)
-                    toast(isWishlisted ? 'Đã xóa khỏi danh sách yêu thích' : 'Đã thêm vào yêu thích!')
-                  }}
-                  className={`grid h-10 w-10 place-items-center rounded-full border border-white/10 backdrop-blur-md transition-all ${
-                    isWishlisted ? 'bg-rose-500 text-white' : 'bg-slate-950/60 text-slate-300 hover:text-white'
-                  }`}
-                >
-                  <Heart size={18} className={isWishlisted ? 'fill-white' : ''} />
-                </button>
+              {/* Share button (Wishlist button removed as requested) */}
+              <div className="absolute top-5 right-5 z-20 flex gap-2">
                 <button
                   onClick={handleShare}
-                  className="grid h-10 w-10 place-items-center rounded-full border border-white/10 bg-slate-950/60 text-slate-300 backdrop-blur-md hover:text-white transition-all"
+                  title="Chia sẻ liên kết sản phẩm"
+                  className="grid h-10 w-10 place-items-center rounded-full border border-white/10 bg-slate-950/70 text-slate-300 backdrop-blur-md hover:text-white hover:bg-slate-950 transition-all shadow-lg"
                 >
                   <Share2 size={18} />
                 </button>
               </div>
 
-              <img
-                src={selectedImage}
-                alt={product.name}
-                className="h-full w-full object-cover object-center transition-transform duration-500 hover:scale-105"
-              />
-            </motion.div>
+              {/* Main Product Image with Animation */}
+              <AnimatePresence mode="wait">
+                <motion.img
+                  key={currentImageIndex}
+                  src={imagesList[currentImageIndex] || product.image}
+                  alt={`${product.name} - ảnh ${currentImageIndex + 1}`}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.3 }}
+                  className="h-full w-full object-cover object-center"
+                />
+              </AnimatePresence>
+
+              {/* Navigation Arrows */}
+              {imagesList.length > 1 && (
+                <>
+                  <button
+                    onClick={handlePrevImage}
+                    title="Ảnh trước"
+                    className="absolute left-4 top-1/2 -translate-y-1/2 z-20 grid h-10 w-10 place-items-center rounded-full border border-white/10 bg-slate-950/70 text-white backdrop-blur-md hover:bg-lime-400 hover:text-slate-950 transition-all shadow-xl active:scale-95 opacity-80 group-hover:opacity-100"
+                  >
+                    <ChevronLeft size={22} />
+                  </button>
+
+                  <button
+                    onClick={handleNextImage}
+                    title="Ảnh kế tiếp"
+                    className="absolute right-4 top-1/2 -translate-y-1/2 z-20 grid h-10 w-10 place-items-center rounded-full border border-white/10 bg-slate-950/70 text-white backdrop-blur-md hover:bg-lime-400 hover:text-slate-950 transition-all shadow-xl active:scale-95 opacity-80 group-hover:opacity-100"
+                  >
+                    <ChevronRight size={22} />
+                  </button>
+
+                  {/* Dots Indicator */}
+                  <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1.5 rounded-full bg-slate-950/60 px-3 py-1.5 backdrop-blur-md border border-white/10">
+                    {imagesList.map((_, idx) => (
+                      <button
+                        key={idx}
+                        onClick={() => setCurrentImageIndex(idx)}
+                        className={`h-2 rounded-full transition-all ${
+                          currentImageIndex === idx ? 'w-6 bg-lime-400' : 'w-2 bg-white/40 hover:bg-white/80'
+                        }`}
+                      />
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
 
             {/* Thumbnails list */}
             {imagesList.length > 1 && (
@@ -248,14 +393,14 @@ export function ProductDetail() {
                 {imagesList.map((img, idx) => (
                   <button
                     key={idx}
-                    onClick={() => setSelectedImage(img)}
+                    onClick={() => setCurrentImageIndex(idx)}
                     className={`relative aspect-square w-20 shrink-0 overflow-hidden rounded-2xl border-2 transition-all ${
-                      selectedImage === img
+                      currentImageIndex === idx
                         ? 'border-lime-400 shadow-[0_0_15px_rgba(163,230,53,0.3)]'
                         : 'border-white/10 opacity-60 hover:opacity-100'
                     }`}
                   >
-                    <img src={img} alt={`${product.name} ${idx + 1}`} className="h-full w-full object-cover" />
+                    <img src={img} alt={`${product.name} thumbnail ${idx + 1}`} className="h-full w-full object-cover" />
                   </button>
                 ))}
               </div>
@@ -268,9 +413,11 @@ export function ProductDetail() {
               {/* Brand & Category Header */}
               <div className="flex items-center justify-between text-xs">
                 <span className="rounded-lg bg-lime-400/10 px-3 py-1 font-bold text-lime-400 border border-lime-400/20">
-                  {product.brand}
+                  {typeof product.brand === 'object' && product.brand !== null ? (product.brand as any).name : product.brand}
                 </span>
-                <span className="text-slate-400">{product.category}</span>
+                <span className="text-slate-400">
+                  {typeof product.category === 'object' && product.category !== null ? (product.category as any).name : product.category}
+                </span>
               </div>
 
               {/* Title */}
@@ -278,7 +425,7 @@ export function ProductDetail() {
                 {product.name}
               </h1>
 
-              {/* Rating & Stock */}
+              {/* Rating & Stock Display by Selected Variant */}
               <div className="flex items-center gap-4 text-xs">
                 <div className="flex items-center gap-1 text-amber-400">
                   {[...Array(5)].map((_, i) => (
@@ -288,9 +435,15 @@ export function ProductDetail() {
                   <span className="text-slate-500">({reviews.length > 0 ? reviews.length : 128} đánh giá)</span>
                 </div>
                 <span className="text-slate-600">|</span>
-                <span className={`font-semibold ${product.stock > 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                  {product.stock > 0 ? `Còn hàng (${product.stock} sản phẩm)` : 'Hết hàng'}
-                </span>
+                {isOutOfStock ? (
+                  <span className="font-bold text-rose-400 bg-rose-500/10 px-2.5 py-1 rounded-lg border border-rose-500/20">
+                    Hết hàng
+                  </span>
+                ) : (
+                  <span className="font-semibold text-emerald-400">
+                    Còn hàng ({currentVariantStock} sản phẩm cho phân loại này)
+                  </span>
+                )}
               </div>
 
               {/* Price Section */}
@@ -310,55 +463,82 @@ export function ProductDetail() {
                 {product.description}
               </p>
 
-              {/* Color Selector */}
+              {/* Color Selector with Out of Stock Badge */}
               {product.colors && product.colors.length > 0 && (
                 <div className="space-y-2">
-                  <label className="text-xs font-bold text-slate-300">
-                    Màu sắc: <span className="text-lime-400">{selectedColor}</span>
-                  </label>
+                  <div className="flex items-center justify-between text-xs">
+                    <label className="font-bold text-slate-300">
+                      Màu sắc: <span className="text-lime-400">{selectedColor}</span>
+                    </label>
+                  </div>
                   <div className="flex flex-wrap gap-2">
-                    {product.colors.map((color) => (
-                      <button
-                        key={color}
-                        onClick={() => setSelectedColor(color)}
-                        className={`rounded-xl border px-4 py-2 text-xs font-semibold transition-all ${
-                          selectedColor === color
-                            ? 'border-lime-400 bg-lime-400/20 text-lime-400 shadow-[0_0_10px_rgba(163,230,53,0.2)]'
-                            : 'border-white/10 bg-white/5 text-slate-300 hover:border-white/30'
-                        }`}
-                      >
-                        {color}
-                      </button>
-                    ))}
+                    {product.colors.map((color) => {
+                      const cStock = getColorStock(color)
+                      const isColorOut = cStock <= 0
+                      return (
+                        <button
+                          key={color}
+                          onClick={() => setSelectedColor(color)}
+                          className={`rounded-xl border px-4 py-2 text-xs font-semibold transition-all relative flex items-center gap-1.5 ${
+                            selectedColor === color
+                              ? 'border-lime-400 bg-lime-400/20 text-lime-400 shadow-[0_0_10px_rgba(163,230,53,0.2)]'
+                              : isColorOut
+                              ? 'border-white/5 bg-white/[0.02] text-slate-500 hover:border-white/10'
+                              : 'border-white/10 bg-white/5 text-slate-300 hover:border-white/30'
+                          }`}
+                        >
+                          <span>{color}</span>
+                          {isColorOut && (
+                            <span className="text-[10px] text-rose-400 font-bold bg-rose-500/10 px-1.5 py-0.2 rounded border border-rose-500/20">
+                              Hết
+                            </span>
+                          )}
+                        </button>
+                      )
+                    })}
                   </div>
                 </div>
               )}
 
-              {/* Size Selector */}
+              {/* Size Selector with Out of Stock Badge (Size Guide removed as requested) */}
               {product.sizes && product.sizes.length > 0 && (
                 <div className="space-y-2">
                   <div className="flex items-center justify-between text-xs">
                     <label className="font-bold text-slate-300">
                       Kích thước: <span className="text-lime-400">{selectedSize}</span>
                     </label>
-                    <button className="text-slate-400 underline hover:text-white transition-colors">
-                      Bảng quy đổi size
-                    </button>
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    {product.sizes.map((size) => (
-                      <button
-                        key={size}
-                        onClick={() => setSelectedSize(size)}
-                        className={`min-w-[44px] h-10 rounded-xl border px-3 text-xs font-bold transition-all ${
-                          selectedSize === size
-                            ? 'border-lime-400 bg-lime-400 text-slate-950 shadow-[0_0_12px_rgba(163,230,53,0.3)]'
-                            : 'border-white/10 bg-white/5 text-slate-300 hover:border-white/30'
-                        }`}
-                      >
-                        {size}
-                      </button>
-                    ))}
+                    {product.sizes.map((size) => {
+                      const sStock = getSizeStock(size)
+                      const isSizeOut = sStock <= 0
+                      return (
+                        <button
+                          key={size}
+                          onClick={() => setSelectedSize(size)}
+                          className={`min-w-[48px] h-10 rounded-xl border px-3 text-xs font-bold transition-all relative flex items-center justify-center gap-1 ${
+                            selectedSize === size
+                              ? 'border-lime-400 bg-lime-400 text-slate-950 shadow-[0_0_12px_rgba(163,230,53,0.3)]'
+                              : isSizeOut
+                              ? 'border-white/5 bg-white/[0.02] text-slate-500 hover:border-white/10'
+                              : 'border-white/10 bg-white/5 text-slate-300 hover:border-white/30'
+                          }`}
+                        >
+                          <span>{size}</span>
+                          {isSizeOut && (
+                            <span
+                              className={`text-[9px] font-bold px-1 rounded ${
+                                selectedSize === size
+                                  ? 'bg-slate-950/80 text-rose-400'
+                                  : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
+                              }`}
+                            >
+                              Hết
+                            </span>
+                          )}
+                        </button>
+                      )
+                    })}
                   </div>
                 </div>
               )}
@@ -367,40 +547,53 @@ export function ProductDetail() {
               <div className="space-y-2">
                 <label className="text-xs font-bold text-slate-300">Số lượng:</label>
                 <div className="flex items-center gap-3">
-                  <div className="flex items-center rounded-xl border border-white/10 bg-white/5 p-1">
+                  <div
+                    className={`flex items-center rounded-xl border p-1 ${
+                      isOutOfStock ? 'border-white/5 bg-white/[0.02] opacity-50' : 'border-white/10 bg-white/5'
+                    }`}
+                  >
                     <button
                       onClick={() => setQuantity((q) => Math.max(1, q - 1))}
-                      className="grid h-8 w-8 place-items-center rounded-lg hover:bg-white/10 text-slate-300 hover:text-white"
+                      disabled={quantity <= 1 || isOutOfStock}
+                      className="grid h-8 w-8 place-items-center rounded-lg hover:bg-white/10 text-slate-300 hover:text-white disabled:opacity-40 disabled:hover:bg-transparent"
                     >
                       <Minus size={14} />
                     </button>
-                    <span className="w-10 text-center text-sm font-bold text-white">{quantity}</span>
+                    <span className="w-10 text-center text-sm font-bold text-white">
+                      {isOutOfStock ? 0 : quantity}
+                    </span>
                     <button
-                      onClick={() => setQuantity((q) => Math.min(product.stock || 99, q + 1))}
-                      className="grid h-8 w-8 place-items-center rounded-lg hover:bg-white/10 text-slate-300 hover:text-white"
+                      onClick={() => setQuantity((q) => Math.min(currentVariantStock, q + 1))}
+                      disabled={quantity >= currentVariantStock || isOutOfStock}
+                      className="grid h-8 w-8 place-items-center rounded-lg hover:bg-white/10 text-slate-300 hover:text-white disabled:opacity-40 disabled:hover:bg-transparent"
                     >
                       <Plus size={14} />
                     </button>
                   </div>
                   <span className="text-xs text-slate-500">
-                    Tổng: <b className="text-white">{formatCurrency(product.price * quantity)}</b>
+                    Tổng: <b className="text-white">{formatCurrency(product.price * (isOutOfStock ? 0 : quantity))}</b>
                   </span>
                 </div>
               </div>
             </div>
 
-            {/* Action Buttons */}
+            {/* Action Buttons (Disabled when out of stock) */}
             <div className="space-y-3 pt-4">
               <div className="grid grid-cols-2 gap-3">
                 <button
                   onClick={handleAddToCart}
+                  disabled={isOutOfStock}
                   className={`flex h-12 items-center justify-center gap-2 rounded-2xl border text-xs font-bold transition-all duration-200 ${
-                    added
+                    isOutOfStock
+                      ? 'border-white/5 bg-white/[0.02] text-slate-500 cursor-not-allowed'
+                      : added
                       ? 'border-emerald-500 bg-emerald-500 text-white'
-                      : 'border-lime-400/40 bg-lime-400/10 text-lime-400 hover:bg-lime-400/20'
+                      : 'border-lime-400/40 bg-lime-400/10 text-lime-400 hover:bg-lime-400/20 active:scale-[0.98]'
                   }`}
                 >
-                  {added ? (
+                  {isOutOfStock ? (
+                    <span>Tạm hết hàng</span>
+                  ) : added ? (
                     <>
                       <Check size={16} />
                       <span>Đã thêm vào giỏ</span>
@@ -415,10 +608,21 @@ export function ProductDetail() {
 
                 <button
                   onClick={handleBuyNow}
-                  className="flex h-12 items-center justify-center gap-2 rounded-2xl bg-lime-400 text-xs font-bold text-slate-950 shadow-[0_0_20px_rgba(163,230,53,0.3)] hover:bg-lime-300 transition-all"
+                  disabled={isOutOfStock}
+                  className={`flex h-12 items-center justify-center gap-2 rounded-2xl text-xs font-bold transition-all ${
+                    isOutOfStock
+                      ? 'bg-slate-800 text-slate-500 cursor-not-allowed shadow-none'
+                      : 'bg-lime-400 text-slate-950 shadow-[0_0_20px_rgba(163,230,53,0.3)] hover:bg-lime-300 active:scale-[0.98]'
+                  }`}
                 >
-                  <Zap size={16} />
-                  <span>Mua ngay</span>
+                  {isOutOfStock ? (
+                    <span>Hết hàng</span>
+                  ) : (
+                    <>
+                      <Zap size={16} />
+                      <span>Mua ngay</span>
+                    </>
+                  )}
                 </button>
               </div>
 
@@ -430,7 +634,7 @@ export function ProductDetail() {
                 </div>
                 <div className="flex items-center gap-2">
                   <Truck size={16} className="text-lime-400 shrink-0" />
-                  <span>Freeship đơn từ 500k</span>
+                  <span>Giao hàng toàn quốc</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <RotateCcw size={16} className="text-lime-400 shrink-0" />
@@ -438,7 +642,7 @@ export function ProductDetail() {
                 </div>
                 <div className="flex items-center gap-2">
                   <Award size={16} className="text-lime-400 shrink-0" />
-                  <span>Bảo hành keo dán 12 tháng</span>
+                  <span>Bảo hành chính hãng 12 tháng</span>
                 </div>
               </div>
             </div>
@@ -496,19 +700,25 @@ export function ProductDetail() {
                   <tbody>
                     <tr className="border-b border-white/10">
                       <td className="py-2.5 font-semibold text-slate-400">Thương hiệu:</td>
-                      <td className="py-2.5 font-bold text-white">{product.brand}</td>
+                      <td className="py-2.5 font-bold text-white">
+                        {typeof product.brand === 'object' && product.brand !== null ? (product.brand as any).name : product.brand}
+                      </td>
                     </tr>
                     <tr className="border-b border-white/10">
                       <td className="py-2.5 font-semibold text-slate-400">Danh mục:</td>
-                      <td className="py-2.5 text-white">{product.category}</td>
+                      <td className="py-2.5 text-white">
+                        {typeof product.category === 'object' && product.category !== null ? (product.category as any).name : product.category}
+                      </td>
                     </tr>
                     <tr className="border-b border-white/10">
                       <td className="py-2.5 font-semibold text-slate-400">Mã SKU:</td>
-                      <td className="py-2.5 text-white">{product.sku || `STR-PROD-${product.id}`}</td>
+                      <td className="py-2.5 text-white">{currentVariant?.sku || product.sku || `STR-PROD-${product.id}`}</td>
                     </tr>
                     <tr className="border-b border-white/10">
                       <td className="py-2.5 font-semibold text-slate-400">Tình trạng kho:</td>
-                      <td className="py-2.5 text-emerald-400 font-bold">Còn {product.stock} sản phẩm</td>
+                      <td className={`py-2.5 font-bold ${isOutOfStock ? 'text-rose-400' : 'text-emerald-400'}`}>
+                        {isOutOfStock ? 'Hết hàng' : `Còn ${currentVariantStock} sản phẩm`}
+                      </td>
                     </tr>
                     <tr>
                       <td className="py-2.5 font-semibold text-slate-400">Xuất xứ:</td>
@@ -525,9 +735,9 @@ export function ProductDetail() {
                 <div className="grid sm:grid-cols-2 gap-4">
                   <div className="rounded-2xl border border-white/10 bg-white/5 p-4 space-y-2">
                     <h4 className="font-bold text-lime-400 flex items-center gap-2">
-                      <Truck size={16} /> Vận chuyển nhanh
+                      <Truck size={16} /> Vận chuyển nhanh GHN Express
                     </h4>
-                    <p className="text-slate-400">Giao hàng toàn quốc từ 1-3 ngày làm việc. Đơn nội thành Hà Nội & TP.HCM có thể nhận trong ngày.</p>
+                    <p className="text-slate-400">Giao hàng toàn quốc từ 1-3 ngày làm việc. Tự động tính phí trực tiếp từ API GHN.</p>
                   </div>
                   <div className="rounded-2xl border border-white/10 bg-white/5 p-4 space-y-2">
                     <h4 className="font-bold text-lime-400 flex items-center gap-2">

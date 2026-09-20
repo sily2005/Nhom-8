@@ -9,7 +9,6 @@ import { AdminLayout } from './layouts/AdminLayout'
 import { Home } from './pages/shop/Home'
 import { Shop } from './pages/shop/Shop'
 import { ProductDetail } from './pages/shop/ProductDetail'
-import { Cart } from './pages/shop/Cart'
 import { Checkout } from './pages/shop/Checkout'
 import { Orders } from './pages/shop/Orders'
 import { Profile } from './pages/shop/Profile'
@@ -106,6 +105,14 @@ function UserApp() {
     )
 }
 
+function CartRedirect() {
+    const { setCartDrawerOpen } = useApp()
+    useEffect(() => {
+        setCartDrawerOpen(true)
+    }, [setCartDrawerOpen])
+    return <Navigate to="/shop" replace />
+}
+
 function ShopRoutes() {
     return (
         <ShopLayout>
@@ -114,7 +121,7 @@ function ShopRoutes() {
                 <Route path="/about" element={<Home />} />
                 <Route path="/shop" element={<Shop />} />
                 <Route path="/product/:id" element={<ProductDetail />} />
-                <Route path="/cart" element={<Cart />} />
+                <Route path="/cart" element={<CartRedirect />} />
                 <Route
                     path="/checkout"
                     element={

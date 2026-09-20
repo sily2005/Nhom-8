@@ -14,20 +14,26 @@ use Illuminate\Support\Facades\Log;
 
 class MomoController extends Controller
 {
-    public function start(Order $order, MomoService $momo)
+    public function start($orderParam, MomoService $momo)
     {
-        if (Auth::check() && $order->user_id !== Auth::id()) {
-            abort(403);
-        }
+        $order = $orderParam instanceof Order
+            ? $orderParam
+            : Order::where('id', $orderParam)
+                ->orWhere('order_number', $orderParam)
+                ->orWhere('order_code', $orderParam)
+                ->firstOrFail();
 
         return $this->redirectToMomo($order, $this->newTransaction($order), $momo);
     }
 
-    public function payAgain(Order $order, MomoService $momo)
+    public function payAgain($orderParam, MomoService $momo)
     {
-        if (Auth::check() && $order->user_id !== Auth::id()) {
-            abort(403);
-        }
+        $order = $orderParam instanceof Order
+            ? $orderParam
+            : Order::where('id', $orderParam)
+                ->orWhere('order_number', $orderParam)
+                ->orWhere('order_code', $orderParam)
+                ->firstOrFail();
 
         return $this->redirectToMomo($order, $this->newTransaction($order), $momo);
     }
@@ -107,7 +113,7 @@ class MomoController extends Controller
     {
         $result = $momo->createPayment($order, $transaction);
 
-        if (request()->wantsJson()) {
+        if (request()->wantsJson() || request()->is('api/*') || request()->ajax() || request()->header('Accept') === 'application/json') {
             if (isset($result['payUrl'])) {
                 return response()->json([
                     'success' => true,
@@ -115,6 +121,8 @@ class MomoController extends Controller
                     'data' => [
                         'pay_url' => $result['payUrl'],
                         'order_id' => $order->id,
+                        'order_number' => $order->order_number,
+                        'order_code' => $order->order_code,
                         'transaction_id' => $transaction->id,
                         'momo_response' => $result,
                     ],
@@ -122,14 +130,14 @@ class MomoController extends Controller
             }
             return response()->json([
                 'success' => false,
-                'message' => 'Không thể kết nối tới MoMo.',
+                'message' => $result['message'] ?? 'Không thể kết nối tới MoMo.',
                 'data' => $result,
             ], 422);
         }
 
         return isset($result['payUrl'])
             ? redirect($result['payUrl'])
-            : redirect()->route('user.orders.index')->with('error', 'Không thể kết nối tới MoMo.');
+            : redirect('http://localhost:5173/orders?status=failed');
     }
 
     private function completePayment(array $payload, GhnService $ghnOrders, MomoService $momo): string

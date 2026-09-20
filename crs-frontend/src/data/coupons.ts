@@ -42,7 +42,7 @@ export function calculateOrderTotals(subtotal: number, coupon: Coupon | null): O
     }
   }
 
-  const finalTotal = Math.max(0, subtotal + baseShip - discountAmount)
+  const finalTotal = Math.max(0, subtotal - discountAmount)
 
   return {
     subtotal,

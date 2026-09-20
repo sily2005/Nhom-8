@@ -15,12 +15,12 @@ export function CartDrawer() {
     cartSubtotal,
     cartTotal,
     discountAmount,
-    shippingFee,
     appliedCoupon,
     removeCoupon,
     updateCart,
     removeFromCart,
     toggleCartItem,
+    toggleSelectAll,
     updateCartVariant,
     user,
     notify,
@@ -111,6 +111,24 @@ export function CartDrawer() {
                   </div>
                 ) : (
                   <div className="space-y-3.5">
+                    {/* Select All Bar */}
+                    <div className="flex items-center justify-between pb-3 px-1 text-xs text-slate-400 border-b border-white/5">
+                      <label className="flex items-center gap-2 cursor-pointer font-medium hover:text-white transition">
+                        <input
+                          type="checkbox"
+                          checked={cart.length > 0 && cart.every((i) => i.selected !== false)}
+                          onChange={toggleSelectAll}
+                          className="h-4 w-4 rounded accent-lime-400 cursor-pointer"
+                        />
+                        <span>
+                          Chọn tất cả ({cart.filter((i) => i.selected !== false).length}/{cart.length})
+                        </span>
+                      </label>
+                      <span className="font-mono text-lime-300 font-bold">
+                        {cartSubtotal.toLocaleString('vi-VN')}đ
+                      </span>
+                    </div>
+
                     {cart.map((item) => (
                       <motion.div
                         layout
@@ -280,7 +298,7 @@ export function CartDrawer() {
                   {/* Lines Breakdown */}
                   <div className="space-y-1.5 text-xs">
                     <div className="flex justify-between text-slate-400">
-                      <span>Tạm tính</span>
+                      <span>Tạm tính tiền hàng</span>
                       <span className="font-mono text-white">
                         {cartSubtotal.toLocaleString('vi-VN')}đ
                       </span>
@@ -288,47 +306,48 @@ export function CartDrawer() {
 
                     {discountAmount > 0 && (
                       <div className="flex justify-between text-emerald-400 font-semibold">
-                        <span>Giảm giá Voucher</span>
+                        <span>Giảm giá Voucher ({appliedCoupon?.code})</span>
                         <span className="font-mono">
                           -{discountAmount.toLocaleString('vi-VN')}đ
                         </span>
                       </div>
                     )}
 
-                    <div className="flex justify-between text-slate-400">
+                    <div className="flex justify-between items-center text-slate-400">
                       <span>Phí giao hàng</span>
                       <span className="font-mono">
-                        {shippingFee === 0 ? (
-                          <b className="text-lime-300">Miễn phí</b>
+                        {appliedCoupon?.discountType === 'freeship' ? (
+                          <b className="text-lime-300">Miễn phí (Freeship)</b>
                         ) : (
-                          `${shippingFee.toLocaleString('vi-VN')}đ`
+                          <span className="text-[11px] font-medium text-amber-300/90 bg-amber-400/10 px-2 py-0.5 rounded-md border border-amber-400/20">
+                            Tính tại thanh toán
+                          </span>
                         )}
                       </span>
                     </div>
 
                     <div className="flex justify-between border-t border-white/10 pt-2 text-sm">
-                      <span className="font-bold text-white">Tổng thanh toán</span>
+                      <span className="font-bold text-white">Tổng tạm tính</span>
                       <b className="font-mono text-base font-black text-lime-300">
                         {cartTotal.toLocaleString('vi-VN')}đ
                       </b>
                     </div>
+                    <p className="text-[10px] text-slate-500 leading-tight">
+                      * Cước vận chuyển chuẩn GHN sẽ được tính theo địa chỉ nhận hàng tại bước thanh toán.
+                    </p>
                   </div>
 
                   {/* Actions */}
-                  <div className="grid grid-cols-2 gap-2.5">
-                    <Link
-                      onClick={() => setCartDrawerOpen(false)}
-                      to="/cart"
-                      className="flex items-center justify-center rounded-xl border border-white/15 py-3 text-xs font-bold text-white transition hover:bg-white/10"
-                    >
-                      Xem chi tiết giỏ
-                    </Link>
-
+                  <div>
                     <button
                       onClick={handleCheckout}
-                      className="flex items-center justify-center gap-2 rounded-xl bg-lime-400 py-3 text-xs font-black text-slate-950 transition hover:bg-lime-300 shadow-lg shadow-lime-400/20"
+                      disabled={cart.filter((i) => i.selected !== false).length === 0}
+                      className="w-full flex items-center justify-between px-5 rounded-2xl bg-gradient-to-r from-lime-400 to-lime-300 py-3.5 text-xs sm:text-sm font-black text-slate-950 transition hover:brightness-110 active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed shadow-xl shadow-lime-400/20"
                     >
-                      Thanh toán <ArrowRight size={15} />
+                      <span className="tracking-wide uppercase">Tiến hành thanh toán</span>
+                      <span className="flex items-center gap-1.5 font-mono text-sm sm:text-base font-black">
+                        {cartTotal.toLocaleString('vi-VN')}đ <ArrowRight size={18} />
+                      </span>
                     </button>
                   </div>
                 </div>

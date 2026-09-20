@@ -75,7 +75,9 @@ export function ProductCard({ product, className = '' }: ProductCardProps) {
       <div className="mt-3.5 flex flex-1 flex-col justify-between space-y-2">
         <div>
           <div className="flex items-center justify-between text-[11px] text-slate-400">
-            <span className="font-semibold uppercase tracking-wider text-lime-400/90">{product.brand}</span>
+            <span className="font-semibold uppercase tracking-wider text-lime-400/90">
+              {typeof product.brand === 'object' && product.brand !== null ? (product.brand as any).name : (product.brand || 'STRIKER')}
+            </span>
             <span className="flex items-center gap-1 text-amber-400">
               <Star size={12} className="fill-amber-400" />
               <span className="font-bold text-slate-200">4.9</span>

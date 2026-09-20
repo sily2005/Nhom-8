@@ -696,7 +696,14 @@ export const Orders: React.FC = () => {
                     <MapPin className="w-3.5 h-3.5" /> Địa chỉ giao hàng (GHN)
                   </h4>
                   <div className="text-xs text-zinc-200 leading-relaxed">
-                    {selectedOrder.customer.address}, {selectedOrder.customer.ward || ''}, {selectedOrder.customer.district}, {selectedOrder.customer.city}
+                    {selectedOrder.customer.address?.includes(',')
+                      ? selectedOrder.customer.address
+                      : [
+                          selectedOrder.customer.address,
+                          selectedOrder.customer.ward,
+                          selectedOrder.customer.district,
+                          selectedOrder.customer.city,
+                        ].filter(Boolean).join(', ')}
                   </div>
                   {selectedOrder.customer.note && (
                     <div className="text-xs text-amber-400 mt-2 font-medium bg-amber-400/10 p-2 rounded-lg border border-amber-400/20">

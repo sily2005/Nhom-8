@@ -147,7 +147,7 @@ class GhnService
             'code' => $item->sku ?? 'SP-'.$item->product_id,
             'quantity' => (int) $item->quantity,
             'price' => (int) $item->price,
-            'weight' => 200,
+            'weight' => 300,
         ])->toArray();
 
         if (empty($items)) {
@@ -155,18 +155,25 @@ class GhnService
                 'name' => 'Gói hàng thể thao Striker',
                 'quantity' => 1,
                 'price' => (int) $order->total_amount,
-                'weight' => 500,
+                'weight' => 300,
             ]];
         }
 
-        $toDistrictId = !empty($customData['to_district_id']) ? (int) $customData['to_district_id'] : 1442;
-        $toWardCode = !empty($customData['to_ward_code']) ? (string) $customData['to_ward_code'] : '20110';
+        $totalWeight = max(300, (int) ($customData['weight'] ?? $order->items->sum(fn ($i) => ((int) ($i->quantity ?: 1)) * 300)));
+
+        $toDistrictId = !empty($customData['to_district_id'])
+            ? (int) $customData['to_district_id']
+            : (!empty($order->to_district_id) ? (int) $order->to_district_id : 1442);
+
+        $toWardCode = !empty($customData['to_ward_code'])
+            ? (string) $customData['to_ward_code']
+            : (!empty($order->to_ward_code) ? (string) $order->to_ward_code : '20110');
         $shopId = (int) config('services.ghn.shop_id', env('GHN_SHOP_ID', $this->shopId));
 
         $payload = [
             'shop_id' => $shopId,
             'client_order_code' => $order->order_number ?: ($order->order_code ?: ('ORD-' . $order->id)),
-            'payment_type_id' => ($order->payment_method === 'cod') ? 2 : 1, // 2: Người nhận thanh toán COD
+            'payment_type_id' => 1, // 1: Bên gửi (Shop) trả phí cước GHN, tiền ship đã được cộng vào cod_amount để GHN thu hộ và đối soát lại cho shop
             'note' => $customData['note'] ?? $order->note ?? 'Hàng giá trị cao, vui lòng cho xem và thử hàng.',
             'required_note' => $customData['required_note'] ?? 'CHOTHUHANG',
             'from_name' => 'CRS Cyber-Sport Store',
@@ -183,10 +190,11 @@ class GhnService
             'to_ward_code' => $toWardCode,
             'cod_amount' => ($order->payment_method === 'cod') ? (int) $order->total_amount : 0,
             'content' => 'Đơn hàng thể thao #'.$order->order_number,
-            'weight' => (int) ($customData['weight'] ?? 500),
+            'weight' => $totalWeight,
             'length' => (int) ($customData['length'] ?? 20),
             'width' => (int) ($customData['width'] ?? 15),
             'height' => (int) ($customData['height'] ?? 10),
+            'insurance_value' => 0,
             'service_type_id' => 2,
             'items' => $items,
         ];
