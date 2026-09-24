@@ -247,30 +247,6 @@ export const AdminLayout: React.FC = () => {
                 </Link>
               );
             })}
-
-            {/* Mục trực tiếp: Tin nhắn CSKH / LiveChat */}
-            <button
-              onClick={() => {
-                setSidebarOpen(false);
-                handleOpenChatWithUser();
-              }}
-              className="w-full group relative flex items-center justify-between px-3.5 py-3 rounded-xl text-sm font-medium transition-all duration-200 text-zinc-400 hover:text-white hover:bg-zinc-800/60"
-            >
-              <div className="flex items-center gap-3">
-                <MessageSquare className="w-5 h-5 text-lime-400 transition-transform duration-200 group-hover:scale-110" />
-                <span className="tracking-wide font-semibold text-white">Tin nhắn Khách hàng</span>
-              </div>
-              
-              <div className="flex items-center gap-1.5">
-                {unreadChatCount > 0 ? (
-                  <span className="px-2 py-0.5 text-[11px] font-mono font-bold rounded-full bg-red-500 text-white animate-pulse">
-                    {unreadChatCount} mới
-                  </span>
-                ) : (
-                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                )}
-              </div>
-            </button>
           </nav>
 
           {/* Sidebar Footer */}
@@ -347,6 +323,21 @@ export const AdminLayout: React.FC = () => {
               <Store className="w-4 h-4 text-lime-400" />
               <span>Cửa hàng</span>
             </Link>
+
+            {/* Quick LiveChat Button */}
+            <button
+              onClick={() => handleOpenChatWithUser()}
+              className="relative p-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 hover:text-white transition"
+              title="Trung tâm Tin nhắn Khách hàng (LiveChat)"
+              aria-label="LiveChat"
+            >
+              <MessageSquare className="w-5 h-5 text-lime-400" />
+              {unreadChatCount > 0 && (
+                <span className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-red-500 text-white font-black text-[10px] font-mono flex items-center justify-center shadow-lg shadow-red-500/40 animate-pulse">
+                  {unreadChatCount}
+                </span>
+              )}
+            </button>
 
             {/* Notifications Dropdown (Bell Icon) */}
             <div className="relative" ref={notifRef}>

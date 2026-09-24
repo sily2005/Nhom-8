@@ -496,12 +496,12 @@ export function Orders() {
                         Chi tiết đơn hàng
                       </button>
 
-                      {/* Cancel Order Button */}
-                      {(order.status === 'pending' || order.status === 'processing') && (
+                      {/* Cancel Order Button: Chỉ cho phép hủy khi đang Chờ xử lý & chưa tạo vận đơn GHN */}
+                      {order.status === 'pending' && !order.ghn_code && !order.ghnTrackingCode && (
                         <button
                           type="button"
                           onClick={() => setCancelModalOrder(order)}
-                          className="flex items-center gap-1.5 rounded-xl border border-rose-500/40 bg-rose-500/10 px-3.5 py-2.5 font-bold text-rose-400 transition hover:bg-rose-500 hover:text-white"
+                          className="flex items-center gap-1.5 rounded-xl border border-rose-500/40 bg-rose-500/10 px-3.5 py-2.5 font-bold text-rose-400 transition hover:bg-rose-500 hover:text-white cursor-pointer"
                         >
                           <XCircle size={14} /> Hủy đơn
                         </button>
@@ -884,17 +884,18 @@ export function Orders() {
                     Đóng
                   </button>
 
-                    <div className="flex items-center gap-2">
-                      {(selectedOrder.status === 'pending' ||
-                        selectedOrder.status === 'processing') && (
-                        <button
-                          type="button"
-                          onClick={() => setCancelModalOrder(selectedOrder)}
-                          className="flex items-center gap-1.5 rounded-xl border border-rose-500/40 bg-rose-500/10 px-4 py-2.5 text-xs font-bold text-rose-400 hover:bg-rose-500 hover:text-white transition"
-                        >
-                          <XCircle size={14} /> Hủy đơn hàng này
-                        </button>
-                      )}
+                  <div className="flex items-center gap-2">
+                    {selectedOrder.status === 'pending' &&
+                      !selectedOrder.ghn_code &&
+                      !selectedOrder.ghnTrackingCode && (
+                      <button
+                        type="button"
+                        onClick={() => setCancelModalOrder(selectedOrder)}
+                        className="flex items-center gap-1.5 rounded-xl border border-rose-500/40 bg-rose-500/10 px-4 py-2.5 text-xs font-bold text-rose-400 hover:bg-rose-500 hover:text-white transition cursor-pointer"
+                      >
+                        <XCircle size={14} /> Hủy đơn hàng này
+                      </button>
+                    )}
 
                       {selectedOrder.paymentMethod === 'momo' &&
                         selectedOrder.paymentStatus !== 'paid' &&

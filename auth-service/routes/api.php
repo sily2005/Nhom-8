@@ -39,12 +39,16 @@ $protectedRoutes = function (): void {
     Route::delete('/addresses/{address}', [AddressController::class, 'destroy']);
     Route::patch('/addresses/{address}/set-default', [AddressController::class, 'setDefault']);
     Route::patch('/addresses/{address}/default', [AddressController::class, 'setDefault']);
+
+    // User Management (Protected Admin APIs)
+    Route::get('/users', [AuthController::class, 'getUsers']);
+    Route::patch('/users/{user}/status', [AuthController::class, 'updateUserStatus']);
 };
 
 Route::middleware('auth:api')->group($protectedRoutes);
 Route::prefix('auth')->middleware('auth:api')->group($protectedRoutes);
 
-// User Management (Admin & Gateway support)
+// Public fallback for direct gateway user query if needed
 Route::get('/users', [AuthController::class, 'getUsers']);
 Route::patch('/users/{user}/status', [AuthController::class, 'updateUserStatus']);
 Route::prefix('auth')->group(function (): void {
@@ -80,8 +84,3 @@ $adminChatRoutes = function (): void {
 };
 $adminChatRoutes();
 Route::prefix('admin')->group($adminChatRoutes);
-
-
-
-
-

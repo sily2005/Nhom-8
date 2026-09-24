@@ -93,6 +93,9 @@ export function Shop() {
           pList.map((item: any) => ({
             ...item,
             id: Number(item.id),
+            price: Number(item.price ?? 0),
+            oldPrice: item.oldPrice != null ? Number(item.oldPrice) : (item.old_price != null ? Number(item.old_price) : undefined),
+            tag: item.tag || undefined,
             category: typeof item.category === 'object' && item.category !== null ? item.category.name : (item.category ?? 'Khác'),
             brand: typeof item.brand === 'object' && item.brand !== null ? item.brand.name : (item.brand ?? 'STRIKER'),
             image: item.image || item.image_url || (Array.isArray(item.images) && item.images.length > 0 ? item.images[0] : '') || '',

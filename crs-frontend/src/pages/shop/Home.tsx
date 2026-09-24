@@ -43,6 +43,9 @@ export function Home() {
             .map((item: any) => ({
               ...item,
               id: Number(item.id),
+              price: Number(item.price ?? 0),
+              oldPrice: item.oldPrice != null ? Number(item.oldPrice) : (item.old_price != null ? Number(item.old_price) : undefined),
+              tag: item.tag || undefined,
               category: typeof item.category === 'object' && item.category !== null ? item.category.name : (item.category ?? 'Khác'),
               brand: typeof item.brand === 'object' && item.brand !== null ? item.brand.name : (item.brand ?? 'STRIKER'),
               image: item.image || item.image_url || (Array.isArray(item.images) && item.images.length > 0 ? item.images[0] : '') || '',
@@ -110,21 +113,21 @@ export function Home() {
       image: 'https://images.unsplash.com/photo-1511886929837-354d827aae26?auto=format&fit=crop&w=800&q=80',
     },
     {
-      title: 'Áo Đấu CLB & Tuyển',
+      title: 'Áo Đấu',
       tag: 'Chính Hãng',
       link: '/shop?category=ao-dau',
       image: 'https://images.unsplash.com/photo-1579952363873-27f3bade9f55?auto=format&fit=crop&w=800&q=80',
     },
     {
-      title: 'Bóng Thi Đấu Chuẩn',
+      title: 'Bóng Thi Đấu',
       tag: 'FIFA Quality',
       link: '/shop?category=bong-thi-dau',
       image: 'https://images.unsplash.com/photo-1551958219-acbc608c6377?auto=format&fit=crop&w=800&q=80',
     },
     {
-      title: 'Găng Tay & Phụ Kiện',
+      title: 'Phụ Kiện',
       tag: 'Bảo Vệ Tối Đa',
-      link: '/shop',
+      link: '/shop?category=phu-kien',
       image: 'https://images.unsplash.com/photo-1461896836934-ffe607ba8211?auto=format&fit=crop&w=800&q=80',
     },
   ]
@@ -187,11 +190,10 @@ export function Home() {
               <motion.div
                 key={voucher.id}
                 whileHover={isAvailable ? { y: -4 } : {}}
-                className={`relative flex flex-col justify-between rounded-3xl border p-5 shadow-xl transition ${
-                  isAvailable
+                className={`relative flex flex-col justify-between rounded-3xl border p-5 shadow-xl transition ${isAvailable
                     ? 'border-white/10 bg-gradient-to-br from-slate-900 to-slate-950 hover:border-lime-400/40'
                     : 'border-white/5 bg-slate-950/40 opacity-50'
-                }`}
+                  }`}
               >
                 <div className="flex items-start justify-between">
                   <div>
@@ -226,13 +228,12 @@ export function Home() {
                     <button
                       onClick={() => handleSaveVoucher(voucher.code)}
                       disabled={saved || !isAvailable}
-                      className={`rounded-xl px-3 py-1.5 font-bold transition ${
-                        !isAvailable
+                      className={`rounded-xl px-3 py-1.5 font-bold transition ${!isAvailable
                           ? 'bg-white/5 text-slate-500 cursor-not-allowed'
                           : saved
-                          ? 'bg-white/10 text-slate-400 cursor-default'
-                          : 'bg-lime-400 text-slate-950 hover:bg-lime-300 cursor-pointer'
-                      }`}
+                            ? 'bg-white/10 text-slate-400 cursor-default'
+                            : 'bg-lime-400 text-slate-950 hover:bg-lime-300 cursor-pointer'
+                        }`}
                     >
                       {!isAvailable ? (isExpired ? 'Đã hết hạn' : 'Đã hết lượt') : saved ? 'Đã lưu' : 'Lưu mã'}
                     </button>
@@ -302,11 +303,10 @@ export function Home() {
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id as typeof activeTab)}
-                className={`rounded-xl px-4 py-2 transition cursor-pointer ${
-                  activeTab === tab.id
+                className={`rounded-xl px-4 py-2 transition cursor-pointer ${activeTab === tab.id
                     ? 'bg-lime-400 text-slate-950 shadow-md font-black'
                     : 'text-slate-400 hover:text-white'
-                }`}
+                  }`}
               >
                 {tab.label}
               </button>

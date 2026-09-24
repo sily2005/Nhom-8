@@ -17,13 +17,17 @@ class ReviewController extends Controller
     public function index(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'product_id' => ['required', 'integer', 'min:1'],
+            'product_id' => ['sometimes', 'nullable', 'integer', 'min:1'],
             'per_page'   => ['sometimes', 'integer', 'min:1', 'max:100'],
         ]);
 
-        $reviews = Review::where('product_id', $validated['product_id'])
-            ->latest()
-            ->paginate($validated['per_page'] ?? 20);
+        $query = Review::query();
+        if (!empty($validated['product_id'])) {
+            $query->where('product_id', $validated['product_id']);
+        }
+
+        $reviews = $query->latest()
+            ->paginate($validated['per_page'] ?? 50);
 
         return response()->json([
             'success' => true,
@@ -35,6 +39,26 @@ class ReviewController extends Controller
                 'total' => $reviews->total(),
                 'last_page' => $reviews->lastPage(),
             ],
+            'errors' => null,
+        ]);
+    }
+
+    /**
+     * Get review summary (avg_rating, count) grouped by product_id.
+     *
+     * @group Review Management
+     */
+    public function summary(): JsonResponse
+    {
+        $summaries = Review::selectRaw('product_id, ROUND(AVG(rating), 1) as avg_rating, COUNT(*) as review_count')
+            ->groupBy('product_id')
+            ->get()
+            ->keyBy('product_id');
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Lấy tổng hợp đánh giá thành công.',
+            'data' => $summaries,
             'errors' => null,
         ]);
     }

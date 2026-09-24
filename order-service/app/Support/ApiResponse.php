@@ -27,9 +27,9 @@ final class ApiResponse
         ], $extra), $status);
     }
 
-    public static function paginated(string $message, LengthAwarePaginator $paginator): JsonResponse
+    public static function paginated(string $message, LengthAwarePaginator $paginator, array $extra = []): JsonResponse
     {
-        return response()->json([
+        return response()->json(array_merge([
             'success' => true,
             'message' => $message,
             'data' => $paginator->items(),
@@ -40,6 +40,6 @@ final class ApiResponse
                 'last_page' => $paginator->lastPage(),
             ],
             'errors' => null,
-        ]);
+        ], $extra));
     }
 }

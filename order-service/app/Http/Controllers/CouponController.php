@@ -3,13 +3,19 @@
 namespace App\Http\Controllers;
 
 use App\Models\Coupon;
+use App\Services\CouponService;
 use Carbon\Carbon;
+use Exception;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 
 class CouponController extends Controller
 {
+    public function __construct(
+        protected CouponService $couponService
+    ) {}
+
     /**
      * List all non-deleted coupons with filters.
      *
@@ -235,71 +241,33 @@ class CouponController extends Controller
             ?? 30000
         );
 
-        $coupon = Coupon::where('code', $cleanCode)
-            ->first();
+        try {
+            $result = $this->couponService->validateAndCalculate($cleanCode, null, $subtotal, $shippingFee, false);
+            $coupon = $result['coupon'];
+            $discountAmount = $result['discount_amount'];
 
-        if (! $coupon || ! $coupon->is_active) {
             return response()->json([
-                'success' => false,
-                'message' => 'Mã giảm giá không tồn tại hoặc đã bị vô hiệu hóa.',
-                'data' => null,
-                'errors' => ['code' => ['Mã giảm giá không hợp lệ.']],
-            ], 422);
-        }
-
-        if ($coupon->expires_at && Carbon::parse($coupon->expires_at)->endOfDay()->isPast()) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Mã giảm giá này đã hết hạn sử dụng.',
-                'data' => null,
-                'errors' => ['code' => ['Mã giảm giá đã hết hạn.']],
-            ], 422);
-        }
-
-        if ($coupon->usage_limit && $coupon->used_count >= $coupon->usage_limit) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Mã giảm giá này đã hết lượt sử dụng.',
-                'data' => null,
-                'errors' => ['code' => ['Mã giảm giá đã hết lượt.']],
-            ], 422);
-        }
-
-        if ($subtotal > 0 && $subtotal < (float) $coupon->min_order_amount) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Đơn hàng tối thiểu '.number_format($coupon->min_order_amount, 0, ',', '.').'đ để sử dụng mã này.',
-                'data' => null,
-                'errors' => ['subtotal' => ['Chưa đạt giá trị đơn tối thiểu.']],
-            ], 422);
-        }
-
-        $discountAmount = 0;
-        if ($coupon->type === 'fixed') {
-            $discountAmount = min($subtotal > 0 ? $subtotal : (float) $coupon->value, (float) $coupon->value);
-        } elseif ($coupon->type === 'percent') {
-            $rawDiscount = ($subtotal * (float) $coupon->value) / 100;
-            $discountAmount = ($coupon->max_discount_amount && (float) $coupon->max_discount_amount > 0)
-                ? min($rawDiscount, (float) $coupon->max_discount_amount)
-                : $rawDiscount;
-        } elseif ($coupon->type === 'freeship') {
-            $discountAmount = $shippingFee;
-        }
-
-        return response()->json([
-            'success' => true,
-            'message' => 'Áp dụng mã giảm giá thành công.',
-            'data' => [
+                'success' => true,
+                'message' => 'Áp dụng mã giảm giá thành công.',
+                'data' => [
+                    'coupon' => $coupon,
+                    'discount_amount' => $discountAmount,
+                    'type' => $coupon->type,
+                    'code' => $coupon->code,
+                ],
                 'coupon' => $coupon,
                 'discount_amount' => $discountAmount,
                 'type' => $coupon->type,
                 'code' => $coupon->code,
-            ],
-            'coupon' => $coupon,
-            'discount_amount' => $discountAmount,
-            'type' => $coupon->type,
-            'code' => $coupon->code,
-            'errors' => null,
-        ]);
+                'errors' => null,
+            ]);
+        } catch (Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+                'data' => null,
+                'errors' => ['code' => [$e->getMessage()]],
+            ], 422);
+        }
     }
 }

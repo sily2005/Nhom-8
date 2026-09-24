@@ -21,41 +21,59 @@ export function mapDbAddress(raw: Record<string, any>): Address {
   }
 }
 
-export async function login(arg1: any, password?: string) {
+export type LoginCredentials = {
+  login?: string
+  email?: string
+  phone?: string
+  password?: string
+}
+
+export async function login(identifierOrPayload: string | LoginCredentials, password?: string) {
   let payload: Record<string, any>
-  if (typeof arg1 === 'string') {
-    const isEmail = arg1.includes('@')
+  if (typeof identifierOrPayload === 'string') {
+    const isEmail = identifierOrPayload.includes('@')
     payload = {
-      login: arg1,
-      email: isEmail ? arg1 : undefined,
-      phone: !isEmail ? arg1 : undefined,
+      login: identifierOrPayload,
+      email: isEmail ? identifierOrPayload : undefined,
+      phone: !isEmail ? identifierOrPayload : undefined,
       password: password,
     }
   } else {
-    payload = arg1
+    payload = identifierOrPayload
   }
   const response = await api.post('/auth/login', payload)
   return response.data
 }
 
-export async function register(arg1: any, arg2?: string, arg3?: string) {
+export type RegisterPayload = {
+  name: string
+  email?: string
+  phone?: string
+  password?: string
+}
+
+export async function register(
+  nameOrPayload: string | RegisterPayload,
+  identifierOrEmail?: string,
+  password?: string
+) {
   let payload: Record<string, any>
-  if (typeof arg1 === 'string') {
-    if (arg2 && arg2.includes('@')) {
+  if (typeof nameOrPayload === 'string') {
+    if (identifierOrEmail && identifierOrEmail.includes('@')) {
       payload = {
-        name: arg1,
-        email: arg2,
-        password: arg3,
+        name: nameOrPayload,
+        email: identifierOrEmail,
+        password: password,
       }
     } else {
       payload = {
-        name: arg1,
-        phone: arg2,
-        password: arg3,
+        name: nameOrPayload,
+        phone: identifierOrEmail,
+        password: password,
       }
     }
   } else {
-    payload = arg1
+    payload = nameOrPayload
   }
   const response = await api.post('/auth/register', payload)
   return response.data
@@ -82,19 +100,22 @@ export async function fetchAddresses(userId?: string | number): Promise<Address[
   return Array.isArray(list) ? list.map(mapDbAddress) : []
 }
 
-export async function createAddress(arg1: any, arg2?: Omit<Address, 'id'>): Promise<Address> {
+export async function createAddress(
+  userIdOrAddress: number | string | Omit<Address, 'id'>,
+  addressData?: Omit<Address, 'id'>
+): Promise<Address> {
   let userId: number | undefined
   let address: Omit<Address, 'id'> | any
 
-  if (typeof arg1 === 'number' || (typeof arg1 === 'string' && !isNaN(Number(arg1)))) {
-    userId = Number(arg1)
-    address = arg2
+  if (typeof userIdOrAddress === 'number' || (typeof userIdOrAddress === 'string' && !isNaN(Number(userIdOrAddress)))) {
+    userId = Number(userIdOrAddress)
+    address = addressData
   } else {
-    address = arg1
+    address = userIdOrAddress
     userId = address.user_id ? Number(address.user_id) : undefined
   }
 
-  // Fallback lấy userId từ local storage nếu chưa truyền
+  // Fallback lấy userId từ localStorage nếu chưa truyền
   if (!userId) {
     try {
       const stored = localStorage.getItem('crs_user')
@@ -191,4 +212,3 @@ export async function toggleUserStatus(id: string | number, isActive?: boolean) 
   const response = await api.patch(`/users/${id}/status`, payload)
   return response.data?.data ?? response.data
 }
-

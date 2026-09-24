@@ -31,15 +31,15 @@ export const DEFAULT_BRAND: BrandItem = {
 };
 
 export const getCategoryName = (c: any): string => {
-  if (!c) return 'Khác';
+  if (!c) return '';
   if (typeof c === 'string') return c;
-  return c.name || c.title || 'Khác';
+  return c.name || c.title || '';
 };
 
 export const getBrandName = (b: any): string => {
-  if (!b) return 'Khác';
+  if (!b) return '';
   if (typeof b === 'string') return b;
-  return b.name || b.title || 'Khác';
+  return b.name || b.title || '';
 };
 
 // Helpers to identify and ensure system default items
@@ -115,8 +115,8 @@ export const Products: React.FC = () => {
             oldPrice: p.old_price != null ? Number(p.old_price) : (p.oldPrice != null ? Number(p.oldPrice) : undefined),
             old_price: p.old_price != null ? Number(p.old_price) : (p.oldPrice != null ? Number(p.oldPrice) : undefined),
             stock: Number(p.stock) || 0,
-            category: getCategoryName(p.category),
-            brand: getBrandName(p.brand),
+            category: getCategoryName(p.category) || 'Khác',
+            brand: getBrandName(p.brand) || 'Khác',
             image: p.image_url ?? p.image ?? '',
             sizes: p.sizes ?? ['40', '41', '42'],
             colors: p.colors ?? ['Volt', 'Black'],
@@ -278,8 +278,8 @@ export const Products: React.FC = () => {
   const handleOpenEdit = (product: Product) => {
     setEditingProduct(product);
     setFormName(product.name || '');
-    setFormBrand(product.brand || '');
-    setFormCategory(product.category || '');
+    setFormBrand(getBrandName(product.brand));
+    setFormCategory(getCategoryName(product.category));
     const cleanPrice = product.price != null ? Math.round(Number(product.price)) : 0;
     const cleanOldPrice = product.oldPrice != null ? Math.round(Number(product.oldPrice)) : 0;
     setFormPrice(cleanPrice > 0 ? String(cleanPrice) : '');
@@ -396,15 +396,19 @@ export const Products: React.FC = () => {
   // Save Product (Create or Update)
   const handleSaveProduct = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formName.trim()) {
+    const catStr = getCategoryName(formCategory).trim();
+    const brandStr = getBrandName(formBrand).trim();
+    const nameStr = (typeof formName === 'string' ? formName : String(formName || '')).trim();
+
+    if (!nameStr) {
       toast.error('Vui lòng nhập tên sản phẩm!');
       return;
     }
-    if (!formCategory.trim()) {
+    if (!catStr) {
       toast.error('Vui lòng chọn danh mục sản phẩm!');
       return;
     }
-    if (!formBrand.trim()) {
+    if (!brandStr) {
       toast.error('Vui lòng chọn thương hiệu sản phẩm!');
       return;
     }
@@ -422,14 +426,14 @@ export const Products: React.FC = () => {
     const primaryImage = formImages[0] || 'https://images.unsplash.com/photo-1511886929837-354d827aae26?auto=format&fit=crop&w=900&q=85';
 
     // Find category_id and brand_id
-    const matchedCategory = categoriesList.find((c) => c.name.toLowerCase() === formCategory.toLowerCase());
-    const matchedBrand = brandsList.find((b) => b.name.toLowerCase() === formBrand.toLowerCase());
+    const matchedCategory = categoriesList.find((c) => c.name.toLowerCase() === catStr.toLowerCase());
+    const matchedBrand = brandsList.find((b) => b.name.toLowerCase() === brandStr.toLowerCase());
 
     const payload = {
-      name: formName.trim(),
-      brand: formBrand,
+      name: nameStr,
+      brand: brandStr,
       brand_id: matchedBrand ? Number(matchedBrand.id) : 1,
-      category: formCategory,
+      category: catStr,
       category_id: matchedCategory ? Number(matchedCategory.id) : 1,
       price: priceNum,
       oldPrice: oldPriceNum,
@@ -888,7 +892,7 @@ export const Products: React.FC = () => {
                       Danh mục *
                     </label>
                     <select
-                      value={formCategory}
+                      value={getCategoryName(formCategory)}
                       onChange={(e) => setFormCategory(e.target.value)}
                       className="w-full bg-zinc-950 border border-zinc-800 text-sm text-zinc-200 px-4 py-3 rounded-xl focus:outline-none focus:border-zinc-700 font-medium"
                     >
@@ -907,7 +911,7 @@ export const Products: React.FC = () => {
                       Thương hiệu *
                     </label>
                     <select
-                      value={formBrand}
+                      value={getBrandName(formBrand)}
                       onChange={(e) => setFormBrand(e.target.value)}
                       className="w-full bg-zinc-950 border border-zinc-800 text-sm text-zinc-200 px-4 py-3 rounded-xl focus:outline-none focus:border-zinc-700 font-medium"
                     >

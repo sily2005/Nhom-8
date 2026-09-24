@@ -5,6 +5,7 @@ import {
   sendAdminMessage, 
   searchAdminCustomers,
   fetchChatUserDetail,
+  markAdminMessagesAsRead,
   type AdminChatUser, 
   type ChatMessage 
 } from '../../services/chat';
@@ -57,6 +58,10 @@ export const AdminChatModal: React.FC<AdminChatModalProps> = ({
   const [sending, setSending] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const selectedUserRef = useRef<AdminChatUser | null>(null);
+  selectedUserRef.current = selectedUser;
+  const usersRef = useRef<AdminChatUser[]>([]);
+  usersRef.current = users;
 
   const scrollToBottom = useCallback((smooth = true) => {
     if (messagesEndRef.current) {
@@ -64,37 +69,62 @@ export const AdminChatModal: React.FC<AdminChatModalProps> = ({
     }
   }, []);
 
-  // 1. Tải danh sách User đã từng nhắn tin
+  // 1. Tải tin nhắn của User đang chọn
+  const loadMessages = useCallback(async (userId: number, showLoading = false) => {
+    if (showLoading) setLoadingMessages(true);
+    try {
+      const msgList = await fetchAdminMessages(userId);
+      setMessages(msgList);
+    } catch (err) {
+      console.error(`Lỗi tải tin nhắn với user ${userId}:`, err);
+    } finally {
+      if (showLoading) {
+        setLoadingMessages(false);
+        setTimeout(() => scrollToBottom(false), 50);
+      }
+    }
+  }, [scrollToBottom]);
+
+  // 2. Tải danh sách User đã từng nhắn tin
   const loadUsers = useCallback(async (isInitial = false) => {
-    if (isInitial) setLoadingUsers(true);
+    if (isInitial && usersRef.current.length === 0) setLoadingUsers(true);
     try {
       const userList = await fetchAdminChatUsers();
       setUsers(userList);
 
-      // Nếu có initialUserId
+      // Nếu có initialUserId truyền từ prop
       if (initialUserId) {
         const matched = userList.find(u => u.id === initialUserId);
         if (matched) {
-          setSelectedUser(matched);
+          if (selectedUserRef.current?.id !== matched.id) {
+            setSelectedUser(matched);
+            void loadMessages(matched.id, true);
+          }
         } else {
           // Khách hàng chưa từng nhắn -> lấy thông tin chi tiết của họ từ DB
           const detail = await fetchChatUserDetail(initialUserId);
           if (detail) {
-            setSelectedUser(detail);
-            setUsers(prev => [detail, ...prev.filter(u => u.id !== detail.id)]);
+            if (selectedUserRef.current?.id !== detail.id) {
+              setSelectedUser(detail);
+              setUsers(prev => [detail, ...prev.filter(u => u.id !== detail.id)]);
+              void loadMessages(detail.id, true);
+            }
           }
         }
-      } else if (userList.length > 0 && !selectedUser) {
-        setSelectedUser(userList[0]);
+      } else if (!selectedUserRef.current && userList.length > 0) {
+        // Chưa chọn user nào -> mặc định chọn người đầu tiên
+        const firstUser = userList[0];
+        setSelectedUser(firstUser);
+        void loadMessages(firstUser.id, true);
       }
     } catch (err) {
       console.error('Lỗi tải danh sách người dùng chat:', err);
     } finally {
       if (isInitial) setLoadingUsers(false);
     }
-  }, [initialUserId, selectedUser]);
+  }, [initialUserId, loadMessages]);
 
-  // 2. Tìm kiếm trong toàn bộ khách hàng hệ thống
+  // 3. Tìm kiếm trong toàn bộ khách hàng hệ thống
   const handleSearchAllCustomers = useCallback(async (query: string) => {
     setSearchingAll(true);
     try {
@@ -121,22 +151,6 @@ export const AdminChatModal: React.FC<AdminChatModalProps> = ({
     }
   }, [searchQuery, isOpen, activeTab, handleSearchAllCustomers]);
 
-  // 3. Tải tin nhắn của User đang chọn
-  const loadMessages = useCallback(async (userId: number, isInitial = false) => {
-    if (isInitial) setLoadingMessages(true);
-    try {
-      const msgList = await fetchAdminMessages(userId);
-      setMessages(msgList);
-    } catch (err) {
-      console.error(`Lỗi tải tin nhắn với user ${userId}:`, err);
-    } finally {
-      if (isInitial) {
-        setLoadingMessages(false);
-        setTimeout(() => scrollToBottom(false), 50);
-      }
-    }
-  }, [scrollToBottom]);
-
   // Polling tự động mỗi 3 giây khi modal đang mở
   useEffect(() => {
     if (!isOpen) return;
@@ -145,13 +159,13 @@ export const AdminChatModal: React.FC<AdminChatModalProps> = ({
 
     const interval = setInterval(() => {
       void loadUsers(false);
-      if (selectedUser?.id) {
-        void loadMessages(selectedUser.id, false);
+      if (selectedUserRef.current?.id) {
+        void loadMessages(selectedUserRef.current.id, false);
       }
     }, 3000);
 
     return () => clearInterval(interval);
-  }, [isOpen, loadUsers, loadMessages, selectedUser?.id]);
+  }, [isOpen, loadUsers, loadMessages]);
 
   // Khi chọn user mới -> tải tin nhắn ngay
   const handleSelectUser = (u: AdminChatUser) => {
@@ -163,6 +177,7 @@ export const AdminChatModal: React.FC<AdminChatModalProps> = ({
       }
       return prev.map(item => item.id === u.id ? { ...item, unread_count: 0 } : item);
     });
+    void markAdminMessagesAsRead(u.id);
     void loadMessages(u.id, true);
   };
 

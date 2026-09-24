@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-#[Fillable(['category_id', 'brand_id', 'name', 'slug', 'sku', 'description', 'price', 'old_price', 'stock', 'brand', 'image_url', 'images', 'colors', 'sizes', 'is_active'])]
+#[Fillable(['category_id', 'brand_id', 'name', 'slug', 'sku', 'description', 'price', 'old_price', 'stock', 'brand', 'tag', 'image_url', 'images', 'colors', 'sizes', 'is_active'])]
 class Product extends Model
 {
     use SoftDeletes;

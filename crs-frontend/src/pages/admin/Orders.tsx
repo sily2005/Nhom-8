@@ -32,7 +32,9 @@ export const Orders: React.FC = () => {
   const [serverStats, setServerStats] = useState<OrderStats | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
+  const [selectedOrderIds, setSelectedOrderIds] = useState<string[]>([]);
   const [isBatchProcessing, setIsBatchProcessing] = useState<boolean>(false);
+  const [isBatchCancelling, setIsBatchCancelling] = useState<boolean>(false);
   const [batchProgress, setBatchProgress] = useState<{ current: number; total: number }>({ current: 0, total: 0 });
 
   const fetchOrdersFromApi = useCallback(async (showToast = false) => {
@@ -73,6 +75,11 @@ export const Orders: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+
+  // Clear selected checkboxes when changing status filter or search
+  useEffect(() => {
+    setSelectedOrderIds([]);
+  }, [statusFilter, searchQuery]);
 
   // Helper: Determine combined payment method & collection status badge
   const getPaymentBadge = (order: Order): { isPaid: boolean; label: string; className: string } => {
@@ -275,30 +282,58 @@ export const Orders: React.FC = () => {
     });
   };
 
-  // Batch Process: Transition all pending orders to processing (Chờ lấy hàng / Tạo vận đơn GHN)
-  const handleBatchProcessPendingOrders = async () => {
-    const pendingOrders = localOrders.filter((o) => o.status === 'pending');
-    if (pendingOrders.length === 0) {
-      toast.info('Không có đơn hàng nào đang ở trạng thái Chờ xử lý.');
+  // Pending Orders subset in current view
+  const pendingOrdersInView = useMemo(
+    () => filteredOrders.filter((o) => o.status === 'pending' && !o.ghn_code && !o.ghnTrackingCode),
+    [filteredOrders]
+  );
+
+  const isAllPendingSelected =
+    pendingOrdersInView.length > 0 &&
+    pendingOrdersInView.every((o) => selectedOrderIds.includes(o.id));
+
+  const handleToggleSelectAll = () => {
+    if (isAllPendingSelected) {
+      const pendingIdsSet = new Set(pendingOrdersInView.map((o) => o.id));
+      setSelectedOrderIds((prev) => prev.filter((id) => !pendingIdsSet.has(id)));
+    } else {
+      const pendingIds = pendingOrdersInView.map((o) => o.id);
+      setSelectedOrderIds((prev) => Array.from(new Set([...prev, ...pendingIds])));
+    }
+  };
+
+  const toggleSelectOrder = (orderId: string) => {
+    setSelectedOrderIds((prev) =>
+      prev.includes(orderId) ? prev.filter((id) => id !== orderId) : [...prev, orderId]
+    );
+  };
+
+  // Batch Process: Process selected pending orders to GHN
+  const handleBatchProcessSelectedOrders = async () => {
+    const ordersToProcess = localOrders.filter(
+      (o) => selectedOrderIds.includes(o.id) && o.status === 'pending'
+    );
+    if (ordersToProcess.length === 0) {
+      toast.info('Vui lòng chọn ít nhất 1 đơn hàng Chờ xử lý để tạo vận đơn.');
       return;
     }
 
     if (
       !window.confirm(
-        `Bạn có chắc chắn muốn xử lý tất cả ${pendingOrders.length} đơn hàng Chờ xử lý sang trạng thái "Chờ lấy hàng" (Tạo vận đơn GHN)?`
+        `Bạn có chắc chắn muốn xử lý ${ordersToProcess.length} đơn hàng đã chọn sang trạng thái "Chờ lấy hàng" (Tạo vận đơn GHN)?`
       )
     ) {
       return;
     }
 
     setIsBatchProcessing(true);
-    setBatchProgress({ current: 0, total: pendingOrders.length });
+    setBatchProgress({ current: 0, total: ordersToProcess.length });
     let successCount = 0;
     let failCount = 0;
 
-    for (let i = 0; i < pendingOrders.length; i++) {
-      const order = pendingOrders[i];
-      setBatchProgress({ current: i + 1, total: pendingOrders.length });
+    for (let i = 0; i < ordersToProcess.length; i++) {
+      const order = ordersToProcess[i];
+      setBatchProgress({ current: i + 1, total: ordersToProcess.length });
       try {
         const response = await api.post(`/orders/${order.id}/ship-ghn`);
         const ghnCode =
@@ -322,15 +357,60 @@ export const Orders: React.FC = () => {
     }
 
     await fetchOrdersFromApi(false);
+    setSelectedOrderIds([]);
     setIsBatchProcessing(false);
 
     if (successCount > 0) {
       toast.success(
-        `⚡ Đã xử lý ${successCount}/${pendingOrders.length} đơn hàng sang trạng thái [Chờ lấy hàng] thành công!`
+        `⚡ Đã xử lý ${successCount}/${ordersToProcess.length} đơn hàng sang trạng thái [Chờ lấy hàng] thành công!`
       );
     }
     if (failCount > 0) {
       toast.error(`⚠️ Có ${failCount} đơn hàng chưa thể tạo vận đơn.`);
+    }
+  };
+
+  // Batch Cancel: Cancel selected pending orders
+  const handleBatchCancelSelectedOrders = async () => {
+    const ordersToCancel = localOrders.filter(
+      (o) => selectedOrderIds.includes(o.id) && o.status === 'pending'
+    );
+    if (ordersToCancel.length === 0) {
+      toast.info('Vui lòng chọn ít nhất 1 đơn hàng Chờ xử lý để hủy.');
+      return;
+    }
+
+    if (
+      !window.confirm(
+        `Bạn có chắc chắn muốn hủy ${ordersToCancel.length} đơn hàng đã chọn? Hành động này không thể hoàn tác.`
+      )
+    ) {
+      return;
+    }
+
+    setIsBatchCancelling(true);
+    let successCount = 0;
+    let failCount = 0;
+
+    for (const order of ordersToCancel) {
+      try {
+        await api.patch(`/orders/${order.id}/status`, { order_status: 'cancelled' });
+        updateOrderStatus(order.id, 'cancelled');
+        successCount++;
+      } catch {
+        failCount++;
+      }
+    }
+
+    await fetchOrdersFromApi(false);
+    setSelectedOrderIds([]);
+    setIsBatchCancelling(false);
+
+    if (successCount > 0) {
+      toast.success(`Đã hủy thành công ${successCount} đơn hàng đã chọn.`);
+    }
+    if (failCount > 0) {
+      toast.error(`Có ${failCount} đơn hàng không thể hủy.`);
     }
   };
 
@@ -371,26 +451,6 @@ export const Orders: React.FC = () => {
         </div>
 
         <div className="flex flex-wrap items-center gap-2.5">
-          {pendingCount > 0 && (
-            <button
-              onClick={handleBatchProcessPendingOrders}
-              disabled={isBatchProcessing}
-              className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-lime-400 to-emerald-400 hover:brightness-110 text-zinc-950 font-black text-xs uppercase tracking-wider shadow-lg shadow-lime-400/20 transition cursor-pointer disabled:opacity-50"
-              title="Xử lý tất cả các đơn Chờ xử lý sang trạng thái Chờ lấy hàng"
-            >
-              {isBatchProcessing ? (
-                <RefreshCw className="w-4 h-4 animate-spin text-zinc-950" />
-              ) : (
-                <Zap className="w-4 h-4 text-zinc-950 stroke-[3]" />
-              )}
-              <span>
-                {isBatchProcessing
-                  ? `Đang xử lý (${batchProgress.current}/${batchProgress.total})...`
-                  : `Xử lý tất cả (${pendingCount} đơn chờ)`}
-              </span>
-            </button>
-          )}
-
           <button
             onClick={() => void fetchOrdersFromApi(true)}
             disabled={isRefreshing}
@@ -540,41 +600,82 @@ export const Orders: React.FC = () => {
         </div>
       </div>
 
-      {/* Pending Orders Batch Action Callout Banner */}
-      {statusFilter === 'pending' && pendingCount > 0 && (
-        <div className="bg-amber-500/10 border border-amber-500/30 p-4 rounded-2xl flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-2.5 text-xs text-amber-300">
-            <Clock className="w-4 h-4 text-amber-400 shrink-0" />
-            <span>
-              Đang có <b>{pendingCount}</b> đơn hàng mới cần xử lý đóng gói và tạo vận đơn GHN.
-            </span>
+      {/* Dynamic Batch Action Bar for Selected Pending Orders */}
+      {selectedOrderIds.length > 0 && (
+        <div className="bg-zinc-900/95 border border-lime-400/40 p-4 rounded-2xl shadow-2xl flex flex-wrap items-center justify-between gap-4 animate-in fade-in slide-in-from-top-2 duration-200">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-lime-400/20 text-lime-400 flex items-center justify-center font-mono font-black text-sm border border-lime-400/30 shadow-inner">
+              {selectedOrderIds.length}
+            </div>
+            <div>
+              <span className="text-sm font-bold text-white">
+                Đã chọn <b className="text-lime-400 font-mono">{selectedOrderIds.length}</b> đơn hàng chờ xử lý
+              </span>
+              <p className="text-xs text-zinc-400 mt-0.5">Chọn hành động xử lý sang "Chờ lấy hàng" hoặc hủy hàng loạt</p>
+            </div>
           </div>
-          <button
-            onClick={handleBatchProcessPendingOrders}
-            disabled={isBatchProcessing}
-            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-lime-400 hover:bg-lime-300 text-zinc-950 font-black text-xs uppercase tracking-wider shadow-md shadow-lime-400/20 transition cursor-pointer disabled:opacity-50"
-          >
-            {isBatchProcessing ? (
-              <RefreshCw className="w-3.5 h-3.5 animate-spin text-zinc-950" />
-            ) : (
-              <Package className="w-3.5 h-3.5 stroke-[2.5]" />
-            )}
-            <span>
-              {isBatchProcessing
-                ? `Đang xử lý (${batchProgress.current}/${batchProgress.total})...`
-                : `Xử lý tất cả ${pendingCount} đơn sang "Chờ lấy hàng"`}
-            </span>
-          </button>
+
+          <div className="flex flex-wrap items-center gap-2.5">
+            <button
+              onClick={handleBatchProcessSelectedOrders}
+              disabled={isBatchProcessing || isBatchCancelling}
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-lime-400 hover:bg-lime-300 text-zinc-950 font-black text-xs uppercase tracking-wider shadow-lg shadow-lime-400/20 transition hover:scale-105 cursor-pointer disabled:opacity-50"
+              title="Tạo vận đơn GHN cho các đơn đã chọn"
+            >
+              {isBatchProcessing ? (
+                <RefreshCw className="w-3.5 h-3.5 animate-spin text-zinc-950" />
+              ) : (
+                <Package className="w-3.5 h-3.5 stroke-[2.5]" />
+              )}
+              <span>
+                {isBatchProcessing
+                  ? `Đang xử lý (${batchProgress.current}/${batchProgress.total})...`
+                  : `Xử lý đơn(${selectedOrderIds.length}) `}
+              </span>
+            </button>
+
+            <button
+              onClick={handleBatchCancelSelectedOrders}
+              disabled={isBatchProcessing || isBatchCancelling}
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-zinc-800 hover:bg-rose-500/25 text-rose-400 hover:text-rose-300 border border-zinc-700 hover:border-rose-500/40 text-xs font-bold transition cursor-pointer disabled:opacity-50"
+              title="Hủy các đơn hàng đã chọn"
+            >
+              {isBatchCancelling ? (
+                <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <Ban className="w-3.5 h-3.5" />
+              )}
+              <span>Hủy đơn({selectedOrderIds.length})</span>
+            </button>
+
+            <button
+              onClick={() => setSelectedOrderIds([])}
+              className="px-3.5 py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white text-xs font-semibold transition cursor-pointer"
+            >
+              Bỏ chọn
+            </button>
+          </div>
         </div>
       )}
 
-      {/* 4. Orders Table - 5 Clean Columns */}
+      {/* 4. Orders Table - 6 Clean Columns */}
       <div className="bg-zinc-900/60 backdrop-blur-xl border border-zinc-800/80 rounded-3xl shadow-2xl overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse min-w-[900px]">
             <thead>
               <tr className="border-b border-zinc-800 bg-zinc-950/40 text-[11px] font-mono uppercase tracking-wider text-zinc-400">
-                <th className="py-4 px-6">MÃ ĐƠN</th>
+                <th className="py-4 px-4 w-12 text-center">
+                  {pendingOrdersInView.length > 0 ? (
+                    <input
+                      type="checkbox"
+                      checked={isAllPendingSelected}
+                      onChange={handleToggleSelectAll}
+                      className="w-4 h-4 rounded border-zinc-700 bg-zinc-950 text-lime-400 accent-lime-400 focus:ring-lime-400/50 cursor-pointer"
+                      title="Chọn tất cả đơn chờ xử lý"
+                    />
+                  ) : null}
+                </th>
+                <th className="py-4 px-4">MÃ ĐƠN</th>
                 <th className="py-4 px-4">KHÁCH HÀNG</th>
                 <th className="py-4 px-4">TỔNG TIỀN</th>
                 <th className="py-4 px-4">TRẠNG THÁI</th>
@@ -590,16 +691,31 @@ export const Orders: React.FC = () => {
                 const isShipping = order.status === 'shipping';
                 const isDelivered = order.status === 'delivered';
                 const isCancelled = order.status === 'cancelled';
+                const isSelected = selectedOrderIds.includes(order.id);
 
                 return (
                   <tr
                     key={order.id}
                     className={`hover:bg-zinc-800/40 transition-colors group ${
-                      isCancelled ? 'opacity-60 bg-zinc-950/30' : ''
-                    }`}
+                      isSelected ? 'bg-lime-400/5' : ''
+                    } ${isCancelled ? 'opacity-60 bg-zinc-950/30' : ''}`}
                   >
+                    {/* Cột Checkbox (chỉ áp dụng cho đơn Chờ xử lý) */}
+                    <td className="py-4 px-4 text-center">
+                      {isPending && !hasGHN ? (
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => toggleSelectOrder(order.id)}
+                          className="w-4 h-4 rounded border-zinc-700 bg-zinc-950 text-lime-400 accent-lime-400 focus:ring-lime-400/50 cursor-pointer"
+                        />
+                      ) : (
+                        <span className="text-zinc-600 text-xs">-</span>
+                      )}
+                    </td>
+
                     {/* Cột 1: Mã đơn & Ngày đặt nhỏ mờ bên dưới */}
-                    <td className="py-4 px-6">
+                    <td className="py-4 px-4">
                       <div className="flex items-center gap-2">
                         <span 
                           className="font-mono font-bold text-lime-400 group-hover:underline cursor-pointer" 
@@ -674,19 +790,30 @@ export const Orders: React.FC = () => {
                       )}
                     </td>
 
-                    {/* Cột 5: Thao tác (Tạo đơn GHN / Badge Mã GHN thật / Chi tiết) */}
+                    {/* Cột 5: Thao tác (Tạo đơn GHN / Nút Hủy / Badge Mã GHN / Chi tiết) */}
                     <td className="py-4 px-6 text-right">
                       <div className="flex items-center justify-end gap-2">
                         {/* TH 1: Chưa tạo đơn GHN & Đơn ở trạng thái Chờ xử lý */}
                         {isPending && !hasGHN && (
-                          <button
-                            onClick={() => handleCreateGHNOrder(order)}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-lime-400 hover:bg-lime-300 text-zinc-950 font-black text-xs uppercase tracking-wider shadow-md shadow-lime-400/20 hover:scale-105 transition cursor-pointer"
-                            title="Tạo đơn Giao Hàng Nhanh (GHN)"
-                          >
-                            <Package className="w-3.5 h-3.5 stroke-[2.5]" />
-                            <span>Tạo đơn GHN</span>
-                          </button>
+                          <>
+                            <button
+                              onClick={() => handleCreateGHNOrder(order)}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-lime-400 hover:bg-lime-300 text-zinc-950 font-black text-xs uppercase tracking-wider shadow-md shadow-lime-400/20 hover:scale-105 transition cursor-pointer"
+                              title="Tạo đơn Giao Hàng Nhanh (GHN)"
+                            >
+                              <Package className="w-3.5 h-3.5 stroke-[2.5]" />
+                              <span>Tạo đơn GHN</span>
+                            </button>
+
+                            <button
+                              onClick={() => handleCancelOrder(order.id)}
+                              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-zinc-800 hover:bg-rose-500/20 text-rose-400 hover:text-rose-300 border border-zinc-700 hover:border-rose-500/40 text-xs font-bold transition cursor-pointer"
+                              title="Hủy đơn hàng này"
+                            >
+                              <Ban className="w-3.5 h-3.5" />
+                              <span>Hủy</span>
+                            </button>
+                          </>
                         )}
 
                         {/* TH 2: Đã có mã GHN thật -> Badge click để copy */}
@@ -719,14 +846,14 @@ export const Orders: React.FC = () => {
 
               {loading ? (
                 <tr>
-                  <td colSpan={5} className="py-16 text-center text-zinc-400">
+                  <td colSpan={6} className="py-16 text-center text-zinc-400">
                     <RefreshCw className="w-8 h-8 mx-auto mb-3 text-lime-400 animate-spin" />
                     <p className="text-sm font-semibold">Đang tải danh sách đơn hàng...</p>
                   </td>
                 </tr>
               ) : filteredOrders.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="py-12 text-center text-zinc-500">
+                  <td colSpan={6} className="py-12 text-center text-zinc-500">
                     <ShoppingBag className="w-12 h-12 mx-auto mb-3 opacity-30 text-lime-400" />
                     <p className="text-sm font-semibold">Không tìm thấy đơn hàng nào phù hợp.</p>
                   </td>
@@ -1014,46 +1141,28 @@ export const Orders: React.FC = () => {
 
                   {/* If GHN created but not shipping yet */}
                   {hasGHN && (selectedOrder.status === 'pending' || (selectedOrder as any).status === 'processing') && (
-                    <>
-                      <button
-                        type="button"
-                        onClick={() => handleCancelOrder(selectedOrder.id)}
-                        className="px-4 py-2.5 rounded-xl bg-zinc-800 hover:bg-red-500/20 text-red-400 hover:text-red-300 border border-transparent hover:border-red-500/30 text-xs font-bold transition cursor-pointer"
-                      >
-                        Hủy đơn
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleSimulateGHNPickup(selectedOrder.id)}
-                        className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-sky-400 border border-sky-500/30 text-xs font-bold transition cursor-pointer"
-                        title="Dành cho môi trường Test: Giả lập bưu tá GHN quét mã lấy hàng"
-                      >
-                        <Zap className="w-3.5 h-3.5" />
-                        <span>[Mô phỏng GHN] Bưu tá đã lấy hàng</span>
-                      </button>
-                    </>
+                    <button
+                      type="button"
+                      onClick={() => handleSimulateGHNPickup(selectedOrder.id)}
+                      className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-sky-400 border border-sky-500/30 text-xs font-bold transition cursor-pointer"
+                      title="Dành cho môi trường Test: Giả lập bưu tá GHN quét mã lấy hàng"
+                    >
+                      <Zap className="w-3.5 h-3.5" />
+                      <span>[Mô phỏng GHN] Bưu tá đã lấy hàng</span>
+                    </button>
                   )}
 
                   {/* If shipping: Simulation button inside detail modal */}
                   {isShipping && (
-                    <>
-                      <button
-                        type="button"
-                        onClick={() => handleCancelOrder(selectedOrder.id)}
-                        className="px-4 py-2.5 rounded-xl bg-zinc-800 hover:bg-red-500/20 text-red-400 hover:text-red-300 border border-transparent hover:border-red-500/30 text-xs font-bold transition cursor-pointer"
-                      >
-                        Hủy đơn
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleSimulateGHNDelivered(selectedOrder.id)}
-                        className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-emerald-400 border border-emerald-500/30 text-xs font-bold transition cursor-pointer"
-                        title="Dành cho môi trường Test: Giả lập bưu tá GHN giao thành công"
-                      >
-                        <Zap className="w-3.5 h-3.5" />
-                        <span>[Mô phỏng GHN] Giao thành công</span>
-                      </button>
-                    </>
+                    <button
+                      type="button"
+                      onClick={() => handleSimulateGHNDelivered(selectedOrder.id)}
+                      className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-emerald-400 border border-emerald-500/30 text-xs font-bold transition cursor-pointer"
+                      title="Dành cho môi trường Test: Giả lập bưu tá GHN giao thành công"
+                    >
+                      <Zap className="w-3.5 h-3.5" />
+                      <span>[Mô phỏng GHN] Giao thành công</span>
+                    </button>
                   )}
 
                   <button

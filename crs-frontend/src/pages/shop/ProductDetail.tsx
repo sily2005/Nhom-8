@@ -36,6 +36,7 @@ const normalizeProduct = (p: any): Product => {
     name: p.name ?? '',
     price: Number(p.price ?? 0),
     oldPrice: p.oldPrice || p.old_price ? Number(p.oldPrice || p.old_price) : undefined,
+    tag: p.tag || undefined,
     category: categoryName,
     brand: brandName,
     stock: Number(p.stock ?? 0),

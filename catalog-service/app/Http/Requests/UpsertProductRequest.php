@@ -46,6 +46,7 @@ class UpsertProductRequest extends FormRequest
             'old_price' => ['nullable', 'numeric', 'min:0'],
             'stock' => [$required, 'integer', 'min:0', 'max:1000000'],
             'brand' => [$required, 'string', 'max:255'],
+            'tag' => ['nullable', 'string', 'max:50'],
             'image_url' => ['nullable', 'string'],
             'images' => ['nullable', 'array'],
             'images.*' => ['string'],
