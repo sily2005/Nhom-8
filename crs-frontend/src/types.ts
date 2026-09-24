@@ -195,16 +195,6 @@ export type ShopSettings = {
   workingHours: string
   warrantyPolicy?: string
   copyright?: string
-  bankName?: string
-  bankAccountNo?: string
-  bankAccountName?: string
-  transferSyntax?: string
-  bankInfo?: {
-    bankName: string
-    accountNumber: string
-    accountHolder: string
-    qrTemplate?: string
-  }
 }
 
 export type Review = {

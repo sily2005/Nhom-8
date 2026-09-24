@@ -17,6 +17,9 @@ return Application::configure(basePath: dirname(__DIR__))
             'payment/momo/ipn',
             'api/payment/momo/ipn',
             'ghn/webhook',
+            'api/ghn/webhook',
+            'shipping/ghn/webhook',
+            'api/shipping/ghn/webhook',
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

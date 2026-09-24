@@ -134,6 +134,40 @@ export async function createAddress(arg1: any, arg2?: Omit<Address, 'id'>): Prom
   }
 }
 
+export async function updateAddress(id: string | number, address: Partial<Address>): Promise<Address> {
+  const payload: Record<string, any> = {}
+  if (address.fullName !== undefined) payload.recipient_name = address.fullName
+  if (address.phone !== undefined) payload.phone = address.phone
+  if (address.province !== undefined) payload.province = address.province
+  if (address.district !== undefined) payload.district = address.district
+  if (address.ward !== undefined) payload.ward = address.ward
+  if (address.street !== undefined || address.detailAddress !== undefined) {
+    payload.street_address = address.street ?? address.detailAddress
+  }
+  if (address.isDefault !== undefined) payload.is_default = address.isDefault
+  if (address.provinceId !== undefined || address.province_id !== undefined) {
+    payload.province_id = address.provinceId ?? address.province_id
+  }
+  if (address.districtId !== undefined || address.district_id !== undefined) {
+    payload.district_id = address.districtId ?? address.district_id
+  }
+  if (address.wardCode !== undefined || address.ward_code !== undefined) {
+    payload.ward_code = address.wardCode ?? address.ward_code
+  }
+
+  const response = await api.put(`/auth/addresses/${id}`, payload)
+  const mapped = mapDbAddress(response.data?.data ?? response.data)
+  return {
+    ...mapped,
+    province_id: mapped.province_id || address.province_id || address.provinceId,
+    district_id: mapped.district_id || address.district_id || address.districtId,
+    ward_code: mapped.ward_code || address.ward_code || address.wardCode,
+    provinceId: mapped.provinceId || address.provinceId || address.province_id,
+    districtId: mapped.districtId || address.districtId || address.district_id,
+    wardCode: mapped.wardCode || address.wardCode || address.ward_code,
+  }
+}
+
 export async function deleteAddress(id: string): Promise<void> {
   await api.delete(`/auth/addresses/${id}`)
 }

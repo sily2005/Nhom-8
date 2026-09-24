@@ -59,6 +59,9 @@ class GatewayController extends Controller
                     if (isset($decoded['pagination'])) {
                         $payload['pagination'] = $decoded['pagination'];
                     }
+                    if (isset($decoded['stats'])) {
+                        $payload['stats'] = $decoded['stats'];
+                    }
                     if (isset($decoded['token'])) {
                         $payload['token'] = $decoded['token'];
                     }

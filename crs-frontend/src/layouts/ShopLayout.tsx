@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Header } from '../components/Header';
 import { CartDrawer } from '../components/CartDrawer';
+import { ChatWidget } from '../components/ChatWidget';
 import { 
   Phone, 
   Mail, 
@@ -154,6 +155,8 @@ export function ShopLayout({ children }: { children: React.ReactNode }) {
       </footer>
 
       <CartDrawer />
+      <ChatWidget />
     </div>
   );
 }
+

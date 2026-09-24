@@ -30,10 +30,23 @@ export const DEFAULT_BRAND: BrandItem = {
   description: 'Thương hiệu mặc định của hệ thống',
 };
 
+export const getCategoryName = (c: any): string => {
+  if (!c) return 'Khác';
+  if (typeof c === 'string') return c;
+  return c.name || c.title || 'Khác';
+};
+
+export const getBrandName = (b: any): string => {
+  if (!b) return 'Khác';
+  if (typeof b === 'string') return b;
+  return b.name || b.title || 'Khác';
+};
+
 // Helpers to identify and ensure system default items
-const isDefaultCategory = (c?: CategoryItem | null): boolean => {
+const isDefaultCategory = (c?: any): boolean => {
   if (!c) return false;
-  return c.id === 999 || c.slug === 'khac' || c.slug === 'other' || c.name.trim().toLowerCase() === 'khác';
+  const name = typeof c === 'string' ? c : (c.name || '');
+  return c.id === 999 || c.slug === 'khac' || c.slug === 'other' || name.trim().toLowerCase() === 'khác';
 };
 
 const isDefaultBrand = (b?: BrandItem | null): boolean => {
@@ -98,8 +111,12 @@ export const Products: React.FC = () => {
         setProductsList(
           pRaw.map((p: any) => ({
             ...p,
-            category: p.category?.name ?? p.category ?? 'Khác',
-            brand: p.brand?.name ?? p.brand ?? 'Khác',
+            price: Number(p.price) || 0,
+            oldPrice: p.old_price != null ? Number(p.old_price) : (p.oldPrice != null ? Number(p.oldPrice) : undefined),
+            old_price: p.old_price != null ? Number(p.old_price) : (p.oldPrice != null ? Number(p.oldPrice) : undefined),
+            stock: Number(p.stock) || 0,
+            category: getCategoryName(p.category),
+            brand: getBrandName(p.brand),
             image: p.image_url ?? p.image ?? '',
             sizes: p.sizes ?? ['40', '41', '42'],
             colors: p.colors ?? ['Volt', 'Black'],
@@ -263,8 +280,10 @@ export const Products: React.FC = () => {
     setFormName(product.name || '');
     setFormBrand(product.brand || '');
     setFormCategory(product.category || '');
-    setFormPrice(product.price ? String(product.price) : '');
-    setFormOldPrice(product.oldPrice ? String(product.oldPrice) : '');
+    const cleanPrice = product.price != null ? Math.round(Number(product.price)) : 0;
+    const cleanOldPrice = product.oldPrice != null ? Math.round(Number(product.oldPrice)) : 0;
+    setFormPrice(cleanPrice > 0 ? String(cleanPrice) : '');
+    setFormOldPrice(cleanOldPrice > 0 ? String(cleanOldPrice) : '');
     
     // Set images list
     if (product.images && product.images.length > 0) {
@@ -369,8 +388,8 @@ export const Products: React.FC = () => {
 
   // Validation helper: Check if old price is invalid (must be strictly greater than sale price)
   const isOldPriceInvalid = useMemo(() => {
-    const p = parseInt(formPrice.replace(/\D/g, ''), 10) || 0;
-    const op = formOldPrice ? parseInt(formOldPrice.replace(/\D/g, ''), 10) : 0;
+    const p = Math.round(Number(formPrice)) || 0;
+    const op = formOldPrice ? Math.round(Number(formOldPrice)) : 0;
     return op > 0 && op <= p;
   }, [formPrice, formOldPrice]);
 
@@ -390,13 +409,13 @@ export const Products: React.FC = () => {
       return;
     }
 
-    const priceNum = parseInt(formPrice.replace(/\D/g, ''), 10) || 0;
+    const priceNum = Math.round(Number(formPrice)) || 0;
     if (priceNum <= 0) {
       toast.error('Vui lòng nhập giá bán sản phẩm hợp lệ!');
       return;
     }
 
-    const rawOldPrice = formOldPrice ? parseInt(formOldPrice.replace(/\D/g, ''), 10) : undefined;
+    const rawOldPrice = formOldPrice ? Math.round(Number(formOldPrice)) : undefined;
     // If old price is <= price, automatically discard it (set to undefined)
     const oldPriceNum = (rawOldPrice && rawOldPrice > priceNum) ? rawOldPrice : undefined;
     const totalStock = calculatedTotalStock;
@@ -414,8 +433,10 @@ export const Products: React.FC = () => {
       category_id: matchedCategory ? Number(matchedCategory.id) : 1,
       price: priceNum,
       oldPrice: oldPriceNum,
+      old_price: oldPriceNum,
       stock: totalStock,
       image: primaryImage,
+      image_url: primaryImage,
       images: formImages.length > 0 ? formImages : [primaryImage],
       tag: formTag || undefined,
       description: formDescription,
@@ -505,13 +526,15 @@ export const Products: React.FC = () => {
     .filter((p) => !p.is_deleted && !p.isDeleted)
     .filter((p) => {
       const q = searchQuery.toLowerCase();
+      const catName = getCategoryName(p.category);
+      const bName = getBrandName(p.brand);
       const matchesQuery =
         p.name.toLowerCase().includes(q) ||
-        p.brand.toLowerCase().includes(q) ||
-        p.category.toLowerCase().includes(q);
+        bName.toLowerCase().includes(q) ||
+        catName.toLowerCase().includes(q);
 
       const matchesCategory =
-        selectedCategory === 'Tất cả' || p.category.toLowerCase() === selectedCategory.toLowerCase();
+        selectedCategory === 'Tất cả' || catName.toLowerCase() === selectedCategory.toLowerCase();
 
       let matchesStock = true;
       if (stockFilter === 'IN_STOCK') matchesStock = p.stock >= 10;
@@ -680,7 +703,7 @@ export const Products: React.FC = () => {
                             {product.name}
                           </h3>
                           <div className="text-xs font-semibold text-lime-400 mt-0.5">
-                            {product.brand}
+                            {getBrandName(product.brand)}
                           </div>
                         </div>
                       </div>
@@ -689,18 +712,18 @@ export const Products: React.FC = () => {
                     {/* Cột 2: Category (Single Badge only) */}
                     <td className="py-4 px-4">
                       <span className="inline-block px-2.5 py-1 rounded-lg text-xs font-semibold bg-zinc-800/80 text-zinc-300 border border-zinc-700/60">
-                        {product.category}
+                        {getCategoryName(product.category)}
                       </span>
                     </td>
 
                     {/* Cột 3: Price (Strikethrough old price only if oldPrice > price) */}
                     <td className="py-4 px-4">
                       <div className="font-mono font-bold text-lime-400">
-                        {product.price.toLocaleString('vi-VN')}₫
+                        {Number(product.price).toLocaleString('vi-VN')}₫
                       </div>
                       {hasDiscount && (
                         <div className="font-mono text-xs text-zinc-400 line-through mt-0.5">
-                          {product.oldPrice!.toLocaleString('vi-VN')}₫
+                          {Number(product.oldPrice).toLocaleString('vi-VN')}₫
                         </div>
                       )}
                     </td>

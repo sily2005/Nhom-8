@@ -2,6 +2,8 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { fetchOrderStats } from '../services/orders';
+import { fetchAdminUnreadCount, type ChatMessage } from '../services/chat';
+import { AdminChatModal } from '../components/admin/AdminChatModal';
 import { 
   LayoutDashboard, 
   Package, 
@@ -18,6 +20,8 @@ import {
   Zap,
   ArrowUpRight,
   ShieldCheck,
+  MessageSquare,
+  Headphones
 } from 'lucide-react';
 
 export const AdminLayout: React.FC = () => {
@@ -26,50 +30,66 @@ export const AdminLayout: React.FC = () => {
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
-  const [unreadCount, setUnreadCount] = useState(3);
   const notifRef = useRef<HTMLDivElement>(null);
 
+  // LiveChat Admin states
+  const [chatModalOpen, setChatModalOpen] = useState(false);
+  const [activeChatUserId, setActiveChatUserId] = useState<number | null>(null);
+  const [unreadChatCount, setUnreadChatCount] = useState<number>(0);
+  const [recentChatMessages, setRecentChatMessages] = useState<ChatMessage[]>([]);
+
+  // Orders stats
   const [pendingOrdersCount, setPendingOrdersCount] = useState<number>(0);
 
-  const loadStats = useCallback(async () => {
+  const loadStatsAndChat = useCallback(async () => {
     try {
       const stats = await fetchOrderStats();
       setPendingOrdersCount(stats.pending ?? 0);
     } catch {
       // ignore
     }
+
+    try {
+      const chatData = await fetchAdminUnreadCount();
+      setUnreadChatCount(chatData.unread_count ?? 0);
+      setRecentChatMessages(chatData.recent_messages || []);
+    } catch {
+      // ignore
+    }
   }, []);
 
-  // Fetch real-time pending count from backend API on mount & on route changes / custom events
+  // Fetch real-time stats from backend API on mount & on route changes / custom events
   useEffect(() => {
-    void loadStats();
+    void loadStatsAndChat();
     const interval = setInterval(() => {
-      void loadStats();
-    }, 15000);
+      void loadStatsAndChat();
+    }, 5000);
 
     const handleOrderChange = () => {
-      void loadStats();
+      void loadStatsAndChat();
     };
     window.addEventListener('order-status-changed', handleOrderChange);
+
+    const handleOpenChatEvent = (e: Event) => {
+      const customEvent = e as CustomEvent<{ userId?: number }>;
+      if (customEvent.detail?.userId) {
+        setActiveChatUserId(Number(customEvent.detail.userId));
+      }
+      setChatModalOpen(true);
+    };
+    window.addEventListener('open-admin-chat', handleOpenChatEvent);
 
     return () => {
       clearInterval(interval);
       window.removeEventListener('order-status-changed', handleOrderChange);
+      window.removeEventListener('open-admin-chat', handleOpenChatEvent);
     };
-  }, [loadStats, location.pathname]);
+  }, [loadStatsAndChat, location.pathname]);
 
-  const [notifications, setNotifications] = useState([
+
+  const systemNotifications = [
     {
       id: 1,
-      title: 'Đơn hàng mới #STR-260908-001',
-      desc: 'Trần Minh Hoàng vừa đặt đơn hàng trị giá 4.190.000₫',
-      time: '5 phút trước',
-      type: 'order',
-      unread: true,
-      link: '/admin/orders',
-    },
-    {
-      id: 2,
       title: 'Cảnh báo tồn kho sắp hết',
       desc: 'Mẫu giày Phantom GX Elite FG (Size 41) chỉ còn 2 đôi',
       time: '32 phút trước',
@@ -78,7 +98,7 @@ export const AdminLayout: React.FC = () => {
       link: '/admin/products',
     },
     {
-      id: 3,
+      id: 2,
       title: 'Voucher STRIKER100K đạt 90% lượt dùng',
       desc: 'Đã có 90/100 lượt áp dụng mã thành công trong tuần này',
       time: '2 giờ trước',
@@ -87,7 +107,7 @@ export const AdminLayout: React.FC = () => {
       link: '/admin/vouchers',
     },
     {
-      id: 4,
+      id: 3,
       title: 'Cổng thanh toán MoMo hoạt động ổn định',
       desc: 'Hệ thống thanh toán trực tuyến MoMo và COD sẵn sàng xử lý đơn hàng',
       time: '1 ngày trước',
@@ -95,7 +115,7 @@ export const AdminLayout: React.FC = () => {
       unread: false,
       link: '/admin/settings',
     },
-  ]);
+  ];
 
   // Close notifications dropdown when clicking outside
   useEffect(() => {
@@ -127,10 +147,13 @@ export const AdminLayout: React.FC = () => {
     navigate('/login');
   };
 
-  const markAllAsRead = () => {
-    setNotifications((prev) => prev.map((n) => ({ ...n, unread: false })));
-    setUnreadCount(0);
+  const handleOpenChatWithUser = (userId?: number) => {
+    if (userId) setActiveChatUserId(userId);
+    setChatModalOpen(true);
+    setNotifOpen(false);
   };
+
+  const totalBellBadge = unreadChatCount + (pendingOrdersCount > 0 ? 1 : 0);
 
   return (
     <div className="min-h-screen bg-[#0B0E17] text-slate-100 flex relative overflow-x-hidden selection:bg-lime-400 selection:text-zinc-950 font-sans">
@@ -210,7 +233,7 @@ export const AdminLayout: React.FC = () => {
                   </div>
                   
                   <div className="flex items-center gap-1.5">
-                    {item.count && (
+                    {item.count !== undefined && item.count > 0 && (
                       <span className={`px-2 py-0.5 text-[11px] font-mono font-bold rounded-full ${isActive ? 'bg-zinc-950 text-lime-400' : 'bg-lime-400/10 text-lime-400 border border-lime-400/30'}`}>
                         {item.count}
                       </span>
@@ -224,6 +247,30 @@ export const AdminLayout: React.FC = () => {
                 </Link>
               );
             })}
+
+            {/* Mục trực tiếp: Tin nhắn CSKH / LiveChat */}
+            <button
+              onClick={() => {
+                setSidebarOpen(false);
+                handleOpenChatWithUser();
+              }}
+              className="w-full group relative flex items-center justify-between px-3.5 py-3 rounded-xl text-sm font-medium transition-all duration-200 text-zinc-400 hover:text-white hover:bg-zinc-800/60"
+            >
+              <div className="flex items-center gap-3">
+                <MessageSquare className="w-5 h-5 text-lime-400 transition-transform duration-200 group-hover:scale-110" />
+                <span className="tracking-wide font-semibold text-white">Tin nhắn Khách hàng</span>
+              </div>
+              
+              <div className="flex items-center gap-1.5">
+                {unreadChatCount > 0 ? (
+                  <span className="px-2 py-0.5 text-[11px] font-mono font-bold rounded-full bg-red-500 text-white animate-pulse">
+                    {unreadChatCount} mới
+                  </span>
+                ) : (
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                )}
+              </div>
+            </button>
           </nav>
 
           {/* Sidebar Footer */}
@@ -274,6 +321,23 @@ export const AdminLayout: React.FC = () => {
 
           {/* Right Header Utilities */}
           <div className="flex items-center gap-3 sm:gap-4">
+            {/* Direct LiveChat Button */}
+            <button
+              onClick={() => handleOpenChatWithUser()}
+              className="hidden sm:inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 hover:border-lime-500/40 text-xs font-semibold text-zinc-300 hover:text-white transition group relative"
+              title="Mở trung tâm LiveChat"
+            >
+              <MessageSquare className="w-4 h-4 text-lime-400 group-hover:scale-110 transition-transform" />
+              <span>Tin nhắn CSKH</span>
+              {unreadChatCount > 0 ? (
+                <span className="px-1.5 py-0.5 rounded-full bg-lime-400 text-zinc-950 font-black text-[10px] font-mono shadow-md shadow-lime-400/40">
+                  {unreadChatCount}
+                </span>
+              ) : (
+                <span className="w-2 h-2 rounded-full bg-emerald-400" />
+              )}
+            </button>
+
             {/* Quick Switch to Shop */}
             <Link
               to="/"
@@ -284,7 +348,7 @@ export const AdminLayout: React.FC = () => {
               <span>Cửa hàng</span>
             </Link>
 
-            {/* Notifications Dropdown */}
+            {/* Notifications Dropdown (Bell Icon) */}
             <div className="relative" ref={notifRef}>
               <button
                 onClick={() => setNotifOpen(!notifOpen)}
@@ -292,9 +356,9 @@ export const AdminLayout: React.FC = () => {
                 aria-label="Thông báo"
               >
                 <Bell className="w-5 h-5" />
-                {unreadCount > 0 && (
-                  <span className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-lime-400 text-zinc-950 font-black text-[10px] font-mono flex items-center justify-center shadow-lg shadow-lime-400/40">
-                    {unreadCount}
+                {totalBellBadge > 0 && (
+                  <span className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-lime-400 text-zinc-950 font-black text-[10px] font-mono flex items-center justify-center shadow-lg shadow-lime-400/40 animate-pulse">
+                    {totalBellBadge}
                   </span>
                 )}
               </button>
@@ -305,55 +369,114 @@ export const AdminLayout: React.FC = () => {
                   <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
                     <div className="flex items-center gap-2">
                       <Zap className="w-4 h-4 text-lime-400" />
-                      <span className="font-bold text-sm text-white">Thông báo hệ thống</span>
-                      {unreadCount > 0 && (
+                      <span className="font-bold text-sm text-white">Thông báo & Tin nhắn</span>
+                      {unreadChatCount > 0 && (
                         <span className="px-1.5 py-0.5 text-[10px] font-mono bg-lime-400/20 text-lime-400 rounded-full font-bold">
-                          {unreadCount} mới
+                          {unreadChatCount} tin nhắn mới
                         </span>
                       )}
                     </div>
-                    {unreadCount > 0 && (
-                      <button
-                        onClick={markAllAsRead}
-                        className="text-xs text-zinc-400 hover:text-lime-400 transition"
-                      >
-                        Đọc tất cả
-                      </button>
-                    )}
                   </div>
 
-                  <div className="mt-3 space-y-2 max-h-80 overflow-y-auto custom-scrollbar">
-                    {notifications.map((item) => (
-                      <Link
-                        key={item.id}
-                        to={item.link}
-                        onClick={() => setNotifOpen(false)}
-                        className={`block p-3 rounded-xl border transition-all ${
-                          item.unread 
-                            ? 'bg-zinc-800/60 border-zinc-700/80 hover:border-lime-500/50' 
-                            : 'bg-zinc-950/40 border-zinc-900 hover:bg-zinc-800/40'
-                        }`}
+                  {/* 1. Phần Tin nhắn Khách hàng LiveChat */}
+                  <div className="mt-3">
+                    <div className="flex items-center justify-between text-[11px] font-bold text-lime-400 uppercase tracking-wider mb-2">
+                      <span className="flex items-center gap-1.5">
+                        <MessageSquare className="w-3.5 h-3.5" />
+                        Tin nhắn khách hàng gần đây
+                      </span>
+                      <button
+                        onClick={() => handleOpenChatWithUser()}
+                        className="text-zinc-400 hover:text-lime-400 lowercase text-[10px] underline"
                       >
-                        <div className="flex items-start justify-between gap-2">
-                          <h4 className="text-xs font-bold text-white flex items-center gap-1.5">
-                            {item.unread && <span className="w-1.5 h-1.5 rounded-full bg-lime-400" />}
-                            {item.title}
-                          </h4>
-                          <span className="text-[10px] font-mono text-zinc-400 whitespace-nowrap">{item.time}</span>
+                        Mở tất cả
+                      </button>
+                    </div>
+
+                    <div className="space-y-1.5 max-h-48 overflow-y-auto custom-scrollbar">
+                      {recentChatMessages.length > 0 ? (
+                        recentChatMessages.map((msg) => (
+                          <div
+                            key={msg.id}
+                            onClick={() => handleOpenChatWithUser(msg.sender_id)}
+                            className="cursor-pointer p-2.5 rounded-xl bg-zinc-800/80 hover:bg-zinc-800 border border-zinc-700/80 hover:border-lime-500/50 transition-all flex items-start gap-2.5"
+                          >
+                            <div className="w-7 h-7 rounded-lg bg-lime-400/10 border border-lime-400/30 flex items-center justify-center text-lime-400 font-bold text-xs shrink-0">
+                              {msg.sender?.name ? msg.sender.name.charAt(0).toUpperCase() : 'K'}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center justify-between">
+                                <span className="text-xs font-bold text-white truncate">
+                                  {msg.sender?.name || `Khách hàng #${msg.sender_id}`}
+                                </span>
+                                <span className="text-[9px] font-mono text-zinc-400">
+                                  {msg.created_at ? new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
+                                </span>
+                              </div>
+                              <p className="text-xs text-zinc-300 truncate mt-0.5">{msg.content}</p>
+                            </div>
+                          </div>
+                        ))
+                      ) : (
+                        <div 
+                          onClick={() => handleOpenChatWithUser()}
+                          className="cursor-pointer p-3 rounded-xl bg-zinc-950/40 border border-zinc-900 text-center text-xs text-zinc-400 hover:text-white transition"
+                        >
+                          Chưa có tin nhắn mới từ khách hàng. Bấm để mở trung tâm LiveChat.
                         </div>
-                        <p className="text-xs text-zinc-400 mt-1 leading-relaxed">{item.desc}</p>
-                      </Link>
-                    ))}
+                      )}
+                    </div>
+                  </div>
+
+                  {/* 2. Phần Hoạt động hệ thống */}
+                  <div className="mt-4 pt-3 border-t border-zinc-800">
+                    <div className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider mb-2">
+                      Hoạt động hệ thống
+                    </div>
+                    <div className="space-y-1.5 max-h-36 overflow-y-auto custom-scrollbar">
+                      {pendingOrdersCount > 0 && (
+                        <Link
+                          to="/admin/orders"
+                          onClick={() => setNotifOpen(false)}
+                          className="block p-2.5 rounded-xl bg-lime-500/10 border border-lime-500/30 hover:bg-lime-500/20 transition-all"
+                        >
+                          <div className="flex items-center justify-between">
+                            <h4 className="text-xs font-bold text-lime-400 flex items-center gap-1.5">
+                              <span className="w-1.5 h-1.5 rounded-full bg-lime-400 animate-pulse" />
+                              Đơn hàng cần xử lý
+                            </h4>
+                            <span className="text-[10px] font-mono text-lime-400 font-bold">{pendingOrdersCount} đơn mới</span>
+                          </div>
+                          <p className="text-xs text-zinc-300 mt-0.5">Có đơn hàng đang chờ duyệt và tạo mã vận đơn GHN.</p>
+                        </Link>
+                      )}
+
+                      {systemNotifications.map((item) => (
+                        <Link
+                          key={item.id}
+                          to={item.link}
+                          onClick={() => setNotifOpen(false)}
+                          className="block p-2 rounded-xl bg-zinc-950/40 border border-zinc-900 hover:bg-zinc-800/40 transition-all"
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <h4 className="text-xs font-semibold text-zinc-300">
+                              {item.title}
+                            </h4>
+                            <span className="text-[9px] font-mono text-zinc-500 whitespace-nowrap">{item.time}</span>
+                          </div>
+                        </Link>
+                      ))}
+                    </div>
                   </div>
 
                   <div className="mt-3 pt-2 border-t border-zinc-800 text-center">
-                    <Link
-                      to="/admin/orders"
-                      onClick={() => setNotifOpen(false)}
-                      className="text-xs text-lime-400 hover:underline font-semibold"
+                    <button
+                      onClick={() => handleOpenChatWithUser()}
+                      className="w-full py-2 rounded-xl bg-gradient-to-r from-lime-400 to-emerald-400 text-zinc-950 font-bold text-xs uppercase tracking-wider hover:brightness-110 shadow-lg shadow-lime-400/20 transition flex items-center justify-center gap-2"
                     >
-                      Xem tất cả hoạt động →
-                    </Link>
+                      <Headphones className="w-4 h-4" />
+                      <span>Mở Trung Tâm LiveChat CSKH</span>
+                    </button>
                   </div>
                 </div>
               )}
@@ -391,6 +514,13 @@ export const AdminLayout: React.FC = () => {
           <Outlet />
         </main>
       </div>
+
+      {/* Admin LiveChat Modal Component */}
+      <AdminChatModal
+        isOpen={chatModalOpen}
+        onClose={() => setChatModalOpen(false)}
+        initialUserId={activeChatUserId}
+      />
     </div>
   );
 };

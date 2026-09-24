@@ -70,67 +70,6 @@ class PaymentController extends Controller
     }
 
     /**
-     * Generate VietQR Quick Link dynamically from DB settings.
-     *
-     * @group Payment Management
-     */
-    public function generateVietQR(Request $request): JsonResponse
-    {
-        $validated = $request->validate([
-            'amount' => ['required', 'numeric', 'min:0'],
-            'order_id' => ['sometimes', 'nullable'],
-            'order_code' => ['sometimes', 'nullable', 'string'],
-            'description' => ['sometimes', 'nullable', 'string'],
-        ]);
-
-        $setting = PaymentSetting::firstOrCreate(
-            ['is_active' => true],
-            [
-                'bank_code' => 'MB',
-                'bank_name' => 'MBBank (Ngân hàng Quân Đội)',
-                'account_number' => '0977777777',
-                'account_name' => 'STRIKER SPORT PRO',
-                'syntax_prefix' => 'STR',
-                'template' => 'compact2',
-            ]
-        );
-
-        $orderIdentifier = $validated['order_code'] ?? $validated['order_id'] ?? ('ORD-' . time());
-        $syntaxPrefix = $setting->syntax_prefix ?: 'STR';
-        $transferSyntax = $validated['description'] ?? "{$syntaxPrefix} {$orderIdentifier}";
-
-        $bankCode = trim($setting->bank_code);
-        $accountNo = trim($setting->account_number);
-        $template = $setting->template ?: 'compact2';
-        $amount = (int) $validated['amount'];
-        $accountName = trim($setting->account_name);
-
-        $query = http_build_query([
-            'amount' => $amount,
-            'addInfo' => $transferSyntax,
-            'accountName' => $accountName,
-        ]);
-
-        $vietQrUrl = "https://img.vietqr.io/image/{$bankCode}-{$accountNo}-{$template}.png?{$query}";
-
-        return response()->json([
-            'success' => true,
-            'message' => 'Tạo mã VietQR Quick Link thành công.',
-            'data' => [
-                'vietqr_url' => $vietQrUrl,
-                'qr_url' => $vietQrUrl,
-                'bank_code' => $bankCode,
-                'bank_name' => $setting->bank_name,
-                'account_number' => $accountNo,
-                'account_name' => $accountName,
-                'amount' => $amount,
-                'transfer_syntax' => $transferSyntax,
-            ],
-            'errors' => null,
-        ]);
-    }
-
-    /**
      * Initialize a payment transaction for an order.
      *
      * @group Payment Management
@@ -140,7 +79,7 @@ class PaymentController extends Controller
         $validated = $request->validate([
             'order_id' => ['required', 'integer', 'min:1'],
             'user_id' => ['required', 'integer', 'min:1'],
-            'payment_method' => ['sometimes', 'in:cod,vnpay,momo,bank_transfer'],
+            'payment_method' => ['sometimes', 'in:cod,vnpay,momo'],
             'amount' => ['required', 'numeric', 'min:0'],
             'order_code' => ['sometimes', 'nullable', 'string'],
         ]);
@@ -159,47 +98,10 @@ class PaymentController extends Controller
             ],
         );
 
-        $responseData = $payment->toArray();
-
-        // If VietQR / Bank Transfer, attach dynamic QR Quick Link generated from DB settings
-        if ($paymentMethod === 'bank_transfer') {
-            $setting = PaymentSetting::firstOrCreate(
-                ['is_active' => true],
-                [
-                    'bank_code' => 'MB',
-                    'bank_name' => 'MBBank (Ngân hàng Quân Đội)',
-                    'account_number' => '0977777777',
-                    'account_name' => 'STRIKER SPORT PRO',
-                    'syntax_prefix' => 'STR',
-                    'template' => 'compact2',
-                ]
-            );
-
-            $orderCode = $validated['order_code'] ?? ('ORD-' . $validated['order_id']);
-            $syntaxPrefix = $setting->syntax_prefix ?: 'STR';
-            $transferSyntax = "{$syntaxPrefix} {$orderCode}";
-
-            $query = http_build_query([
-                'amount' => (int) $validated['amount'],
-                'addInfo' => $transferSyntax,
-                'accountName' => $setting->account_name,
-            ]);
-
-            $responseData['vietqr'] = [
-                'vietqr_url' => "https://img.vietqr.io/image/{$setting->bank_code}-{$setting->account_number}-{$setting->template}.png?{$query}",
-                'bank_code' => $setting->bank_code,
-                'bank_name' => $setting->bank_name,
-                'account_number' => $setting->account_number,
-                'account_name' => $setting->account_name,
-                'amount' => (int) $validated['amount'],
-                'transfer_syntax' => $transferSyntax,
-            ];
-        }
-
         return response()->json([
             'success' => true,
             'message' => 'Khởi tạo thông tin thanh toán thành công.',
-            'data' => $responseData,
+            'data' => $payment,
             'errors' => null,
         ], 201);
     }
@@ -242,8 +144,21 @@ class PaymentController extends Controller
             'order_id' => ['required', 'integer', 'min:1'],
             'status' => ['required', 'in:completed,failed'],
             'transaction_id' => ['nullable', 'string', 'max:255'],
-            'payment_method' => ['sometimes', 'in:cod,vnpay,momo,bank_transfer'],
+            'payment_method' => ['sometimes', 'in:cod,vnpay,momo'],
+            'signature' => ['sometimes', 'string'],
         ]);
+
+        // SEC-03: Verify HMAC Signature if secret key is configured
+        $webhookSecret = config('services.payment.webhook_secret', env('PAYMENT_WEBHOOK_SECRET'));
+        if (!empty($webhookSecret)) {
+            $receivedSignature = (string) ($request->header('X-Webhook-Signature') ?? $request->input('signature') ?? '');
+            $payloadString = $validated['order_id'] . '|' . $validated['status'] . '|' . ($validated['transaction_id'] ?? '');
+            $expectedSignature = hash_hmac('sha256', $payloadString, $webhookSecret);
+
+            if (empty($receivedSignature) || !hash_equals($expectedSignature, $receivedSignature)) {
+                abort(403, 'Chữ ký số xác thực callback thanh toán không hợp lệ.');
+            }
+        }
 
         $payment = DB::transaction(function () use ($validated): Payment {
             $payment = Payment::where('order_id', $validated['order_id'])->lockForUpdate()->first();

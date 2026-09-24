@@ -21,12 +21,3 @@ export async function updatePaymentSettings(payload: Partial<PaymentSetting>): P
   return response.data?.data ?? response.data
 }
 
-export async function generateVietQR(payload: {
-  amount: number
-  order_id?: number | string
-  order_code?: string
-  description?: string
-}) {
-  const response = await api.post('/payments/vietqr', payload)
-  return response.data?.data ?? response.data
-}

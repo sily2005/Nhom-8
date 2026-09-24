@@ -5,7 +5,6 @@ use Illuminate\Support\Facades\Route;
 
 Route::get('/payments/settings', [PaymentController::class, 'getSettings']);
 Route::put('/payments/settings', [PaymentController::class, 'updateSettings']);
-Route::post('/payments/vietqr', [PaymentController::class, 'generateVietQR']);
 
 Route::post('/payments', [PaymentController::class, 'processPayment']);
 Route::get('/payments/status', [PaymentController::class, 'getPaymentStatus']);

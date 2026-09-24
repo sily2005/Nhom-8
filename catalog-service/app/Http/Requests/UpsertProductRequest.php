@@ -12,6 +12,23 @@ class UpsertProductRequest extends FormRequest
         return true;
     }
 
+    protected function prepareForValidation(): void
+    {
+        $merge = [];
+        if ($this->has('image') && !$this->has('image_url')) {
+            $merge['image_url'] = $this->input('image');
+        }
+        if ($this->has('oldPrice') && !$this->has('old_price')) {
+            $merge['old_price'] = $this->input('oldPrice');
+        }
+        if ($this->has('categoryId') && !$this->has('category_id')) {
+            $merge['category_id'] = $this->input('categoryId');
+        }
+        if (!empty($merge)) {
+            $this->merge($merge);
+        }
+    }
+
     public function rules(): array
     {
         /** @var Product|null $product */
@@ -29,9 +46,9 @@ class UpsertProductRequest extends FormRequest
             'old_price' => ['nullable', 'numeric', 'min:0'],
             'stock' => [$required, 'integer', 'min:0', 'max:1000000'],
             'brand' => [$required, 'string', 'max:255'],
-            'image_url' => ['nullable', 'string', 'max:2048'],
+            'image_url' => ['nullable', 'string'],
             'images' => ['nullable', 'array'],
-            'images.*' => ['string', 'max:2048'],
+            'images.*' => ['string'],
             'colors' => ['nullable', 'array'],
             'sizes' => ['nullable', 'array'],
             'variants' => ['nullable', 'array'],

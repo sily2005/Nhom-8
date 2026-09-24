@@ -68,6 +68,12 @@ export function ProductDetail() {
   const [added, setAdded] = useState(false)
   const [reviews, setReviews] = useState<Review[]>([])
 
+  const averageRating = useMemo(() => {
+    if (reviews.length === 0) return '5.0'
+    const sum = reviews.reduce((acc, r) => acc + (Number(r.rating) || 5), 0)
+    return (sum / reviews.length).toFixed(1)
+  }, [reviews])
+
   useEffect(() => {
     let isMounted = true
     setLoading(true)
@@ -583,7 +589,7 @@ export function ProductDetail() {
                 <button
                   onClick={handleAddToCart}
                   disabled={isOutOfStock}
-                  className={`flex h-12 items-center justify-center gap-2 rounded-2xl border text-xs font-bold transition-all duration-200 ${
+                  className={`flex h-12 items-center justify-center gap-2 rounded-2xl border text-xs font-bold transition-all duration-200 cursor-pointer ${
                     isOutOfStock
                       ? 'border-white/5 bg-white/[0.02] text-slate-500 cursor-not-allowed'
                       : added
@@ -609,7 +615,7 @@ export function ProductDetail() {
                 <button
                   onClick={handleBuyNow}
                   disabled={isOutOfStock}
-                  className={`flex h-12 items-center justify-center gap-2 rounded-2xl text-xs font-bold transition-all ${
+                  className={`flex h-12 items-center justify-center gap-2 rounded-2xl text-xs font-bold transition-all cursor-pointer ${
                     isOutOfStock
                       ? 'bg-slate-800 text-slate-500 cursor-not-allowed shadow-none'
                       : 'bg-lime-400 text-slate-950 shadow-[0_0_20px_rgba(163,230,53,0.3)] hover:bg-lime-300 active:scale-[0.98]'
@@ -626,23 +632,22 @@ export function ProductDetail() {
                 </button>
               </div>
 
-              {/* Guarantees Box */}
-              <div className="grid grid-cols-2 gap-3 rounded-2xl border border-white/10 bg-slate-900/40 p-4 text-[11px] text-slate-300">
-                <div className="flex items-center gap-2">
-                  <ShieldCheck size={16} className="text-lime-400 shrink-0" />
-                  <span>100% Chính hãng STRIKER</span>
+              {/* Badges / Guarantees */}
+              <div className="grid grid-cols-3 gap-3 pt-4 border-t border-white/10 text-center">
+                <div className="flex flex-col items-center gap-1.5 rounded-2xl border border-white/5 bg-white/[0.02] p-3">
+                  <ShieldCheck className="text-lime-400" size={20} />
+                  <span className="text-[10px] font-bold text-white">Chính hãng 100%</span>
+                  <span className="text-[9px] text-slate-500">Cam kết chuẩn Auth</span>
                 </div>
-                <div className="flex items-center gap-2">
-                  <Truck size={16} className="text-lime-400 shrink-0" />
-                  <span>Giao hàng toàn quốc</span>
+                <div className="flex flex-col items-center gap-1.5 rounded-2xl border border-white/5 bg-white/[0.02] p-3">
+                  <Truck className="text-lime-400" size={20} />
+                  <span className="text-[10px] font-bold text-white">Giao hàng GHN</span>
+                  <span className="text-[9px] text-slate-500">Toàn quốc 1-3 ngày</span>
                 </div>
-                <div className="flex items-center gap-2">
-                  <RotateCcw size={16} className="text-lime-400 shrink-0" />
-                  <span>Đổi trả 30 ngày dễ dàng</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Award size={16} className="text-lime-400 shrink-0" />
-                  <span>Bảo hành chính hãng 12 tháng</span>
+                <div className="flex flex-col items-center gap-1.5 rounded-2xl border border-white/5 bg-white/[0.02] p-3">
+                  <RotateCcw className="text-lime-400" size={20} />
+                  <span className="text-[10px] font-bold text-white">Đổi trả 30 ngày</span>
+                  <span className="text-[9px] text-slate-500">Hỗ trợ đổi size</span>
                 </div>
               </div>
             </div>
@@ -657,14 +662,14 @@ export function ProductDetail() {
               { key: 'description', label: 'Mô tả chi tiết', icon: Sparkles },
               { key: 'specs', label: 'Thông số kỹ thuật', icon: Award },
               { key: 'shipping', label: 'Giao hàng & Đổi trả', icon: Truck },
-              { key: 'reviews', label: `Đánh giá (${reviews.length > 0 ? reviews.length : 128})`, icon: MessageSquareText },
+              { key: 'reviews', label: `Đánh giá (${reviews.length})`, icon: MessageSquareText },
             ].map((tab) => {
               const Icon = tab.icon
               return (
                 <button
                   key={tab.key}
                   onClick={() => setActiveTab(tab.key as any)}
-                  className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold transition-all ${
+                  className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold transition-all cursor-pointer ${
                     activeTab === tab.key
                       ? 'bg-lime-400 text-slate-950 shadow-md'
                       : 'text-slate-400 hover:bg-white/5 hover:text-white'
@@ -711,12 +716,16 @@ export function ProductDetail() {
                       </td>
                     </tr>
                     <tr className="border-b border-white/10">
-                      <td className="py-2.5 font-semibold text-slate-400">Mã SKU:</td>
-                      <td className="py-2.5 text-white">{currentVariant?.sku || product.sku || `STR-PROD-${product.id}`}</td>
+                      <td className="py-2.5 font-semibold text-slate-400">Chất liệu:</td>
+                      <td className="py-2.5 text-white">Sợi dệt Flyknit/Gripknit cao cấp kết hợp đệm khí chuyên dụng</td>
                     </tr>
                     <tr className="border-b border-white/10">
-                      <td className="py-2.5 font-semibold text-slate-400">Tình trạng kho:</td>
-                      <td className={`py-2.5 font-bold ${isOutOfStock ? 'text-rose-400' : 'text-emerald-400'}`}>
+                      <td className="py-2.5 font-semibold text-slate-400">Loại đinh:</td>
+                      <td className="py-2.5 text-white">FG / AG (Phù hợp mặt cỏ tự nhiên & nhân tạo)</td>
+                    </tr>
+                    <tr className="border-b border-white/10">
+                      <td className="py-2.5 font-semibold text-slate-400">Tình trạng tồn kho:</td>
+                      <td className="py-2.5 text-emerald-400 font-bold">
                         {isOutOfStock ? 'Hết hàng' : `Còn ${currentVariantStock} sản phẩm`}
                       </td>
                     </tr>
@@ -751,66 +760,75 @@ export function ProductDetail() {
 
             {activeTab === 'reviews' && (
               <div className="space-y-6">
+                {/* Review Header Stats */}
                 <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-white/10 bg-white/5 p-6">
                   <div className="flex items-center gap-4">
                     <div className="text-center">
-                      <div className="text-4xl font-black text-lime-400">4.9</div>
+                      <div className="text-4xl font-black text-lime-400">{averageRating}</div>
                       <div className="text-[10px] text-slate-400">trên 5 sao</div>
                     </div>
                     <div className="flex flex-col gap-1">
                       <div className="flex items-center gap-1 text-amber-400">
                         {[...Array(5)].map((_, i) => (
-                          <Star key={i} size={14} className="fill-amber-400" />
+                          <Star
+                            key={i}
+                            size={14}
+                            className={i < Math.round(Number(averageRating)) ? 'fill-amber-400 text-amber-400' : 'text-slate-600'}
+                          />
                         ))}
                       </div>
-                      <span className="text-slate-400 text-[11px]">Dựa trên trải nghiệm thực tế của khách hàng</span>
+                      <span className="text-slate-400 text-[11px]">
+                        Dựa trên {reviews.length} đánh giá thực tế từ khách hàng
+                      </span>
                     </div>
                   </div>
                 </div>
 
                 {/* Reviews List */}
-                <div className="space-y-4">
-                  {(reviews.length > 0 ? reviews : [
-                    {
-                      id: 1,
-                      productId: product.id,
-                      userId: '101',
-                      userName: 'Nguyễn Văn Minh',
-                      rating: 5,
-                      comment: 'Giày lên chân rất ôm, đi êm và sút lực tốt lắm shop ơi. Đóng gói cẩn thận 10/10!',
-                      date: '10/09/2026',
-                    },
-                    {
-                      id: 2,
-                      productId: product.id,
-                      userId: '102',
-                      userName: 'Trần Hoàng Nam',
-                      rating: 5,
-                      comment: 'Giao hàng siêu nhanh luôn, đặt hôm qua hôm nay đã có. Giày chính hãng chất lượng!',
-                      date: '08/09/2026',
-                    },
-                  ]).map((rev) => (
-                    <div key={rev.id} className="rounded-2xl border border-white/10 bg-white/5 p-4 space-y-2">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <div className="grid h-8 w-8 place-items-center rounded-full bg-lime-400/20 font-bold text-lime-400">
-                            {rev.userName.charAt(0)}
+                {reviews.length > 0 ? (
+                  <div className="space-y-4">
+                    {reviews.map((rev) => (
+                      <div key={rev.id} className="rounded-2xl border border-white/10 bg-white/5 p-4 space-y-2.5">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className="grid h-9 w-9 place-items-center rounded-full bg-lime-400/10 font-bold text-lime-400 border border-lime-400/20 text-xs">
+                              {rev.userName ? rev.userName.charAt(0).toUpperCase() : 'K'}
+                            </div>
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <span className="font-bold text-white text-sm">{rev.userName}</span>
+                                <span className="text-[10px] font-medium text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20 flex items-center gap-1">
+                                  <Check size={10} /> Đã mua hàng
+                                </span>
+                              </div>
+                              <div className="text-[10px] text-slate-500">{rev.date}</div>
+                            </div>
                           </div>
-                          <div>
-                            <div className="font-bold text-white">{rev.userName}</div>
-                            <div className="text-[10px] text-slate-500">{rev.date}</div>
+                          <div className="flex items-center gap-0.5 text-amber-400">
+                            {[...Array(5)].map((_, i) => (
+                              <Star
+                                key={i}
+                                size={13}
+                                className={i < rev.rating ? 'fill-amber-400 text-amber-400' : 'text-slate-600'}
+                              />
+                            ))}
                           </div>
                         </div>
-                        <div className="flex items-center gap-0.5 text-amber-400">
-                          {[...Array(rev.rating)].map((_, i) => (
-                            <Star key={i} size={12} className="fill-amber-400" />
-                          ))}
-                        </div>
+                        <p className="text-slate-300 text-xs leading-relaxed pt-0.5">{rev.comment}</p>
                       </div>
-                      <p className="text-slate-300 pt-1">{rev.comment}</p>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="rounded-2xl border border-dashed border-white/10 bg-white/5 py-12 text-center space-y-3">
+                    <div className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-white/5 text-slate-400">
+                      <MessageSquareText size={24} />
                     </div>
-                  ))}
-                </div>
+                    <div>
+                      <h4 className="font-bold text-white text-sm">Chưa có đánh giá nào cho sản phẩm này</h4>
+                      <p className="text-xs text-slate-400 mt-1">Sản phẩm hiện đang được cập nhật thêm phản hồi từ khách hàng.</p>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>

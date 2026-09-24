@@ -120,4 +120,60 @@ class ShippingController extends Controller
             ], 422);
         }
     }
+
+    /**
+     * Handle GHN Webhook callback for real-time tracking updates.
+     */
+    public function webhook(Request $request): JsonResponse
+    {
+        $payload = $request->all();
+        \Illuminate\Support\Facades\Log::info('GHN Webhook received:', $payload);
+
+        $orderCode = $payload['OrderCode'] ?? $payload['order_code'] ?? null;
+        $clientOrderCode = $payload['ClientOrderCode'] ?? $payload['client_order_code'] ?? null;
+        $ghnStatus = strtolower((string) ($payload['Status'] ?? $payload['status'] ?? ''));
+
+        if (! $orderCode && ! $clientOrderCode) {
+            return response()->json(['message' => 'Missing OrderCode or ClientOrderCode'], 400);
+        }
+
+        $order = \App\Models\Order::query()
+            ->when($orderCode, fn ($q) => $q->where('ghn_code', $orderCode))
+            ->orWhere('order_number', $clientOrderCode)
+            ->orWhere('order_code', $clientOrderCode)
+            ->first();
+
+        if (! $order) {
+            return response()->json(['message' => 'Order not found'], 404);
+        }
+
+        // Map GHN status to internal order status
+        $newStatus = match ($ghnStatus) {
+            'ready_to_pick', 'picking' => 'processing',
+            'picked', 'storing', 'transporting', 'sorting', 'delivering', 'money_collect_delivering' => 'shipping',
+            'delivered', 'finish' => 'delivered',
+            'cancel' => 'cancelled',
+            default => null,
+        };
+
+        if ($newStatus) {
+            $updateData = [
+                'order_status' => $newStatus,
+                'status' => $newStatus,
+            ];
+
+            if ($newStatus === 'delivered' && $order->payment_method === 'cod') {
+                $updateData['payment_status'] = 'paid';
+            }
+
+            $order->update($updateData);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Webhook processed successfully',
+            'order_status' => $newStatus ?? $order->order_status,
+        ]);
+    }
 }
+

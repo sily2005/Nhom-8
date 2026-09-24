@@ -27,6 +27,7 @@ export interface CreateOrderPayload {
     color?: string
     selectedColor?: string
     sku?: string
+    image?: string
   }>
 }
 
@@ -74,6 +75,7 @@ export interface OrderStats {
   total: number
   revenue?: number
   pending: number
+  processing?: number
   shipping: number
   delivered: number
   cancelled: number
@@ -105,7 +107,7 @@ export async function cancelOrder(orderId: string | number) {
 /** Map a raw order-service response to the frontend Order type */
 export function mapBackendOrder(raw: Record<string, any>): Order {
   const items: OrderItem[] = (raw.items ?? raw.order_items ?? []).map((i: Record<string, any>) => {
-    let img = i.image ?? i.product_image ?? i.product?.image ?? ''
+    let img = i.image ?? i.product_image ?? i.product?.image ?? i.product?.image_url ?? (Array.isArray(i.images) ? i.images[0] : '') ?? ''
     if (img && typeof img === 'string' && !img.startsWith('http') && !img.startsWith('data:')) {
       img = img.startsWith('/') ? `http://localhost:8000${img}` : `http://localhost:8000/storage/${img}`
     }
@@ -113,7 +115,7 @@ export function mapBackendOrder(raw: Record<string, any>): Order {
       id: Number(i.product_id ?? i.id),
       name: i.product_name ?? i.name ?? `Sản phẩm #${i.product_id ?? i.id}`,
       brand: i.brand ?? '',
-      image: img || 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=300&q=80',
+      image: img || 'https://images.unsplash.com/photo-1511886929837-354d827aae26?auto=format&fit=crop&w=300&q=80',
       price: Number(i.unit_price ?? i.price ?? 0),
       quantity: Number(i.quantity ?? 1),
       selectedSize: i.variant_attributes?.size ?? i.size ?? undefined,

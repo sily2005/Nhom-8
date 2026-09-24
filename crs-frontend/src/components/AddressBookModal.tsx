@@ -10,6 +10,8 @@ import {
   ArrowLeft,
   Loader2,
   ChevronDown,
+  Trash2,
+  Edit3,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { useApp } from '../context/AppContext'
@@ -17,6 +19,7 @@ import {
   fetchProvinces,
   fetchDistricts,
   fetchWards,
+  matchGhnLocation,
   type GHNProvince,
   type GHNDistrict,
   type GHNWard,
@@ -36,12 +39,13 @@ export const AddressBookModal: React.FC<AddressBookModalProps> = ({
   selectedAddressId,
   onSelectAddress,
 }) => {
-  const { user, addAddress } = useApp()
+  const { user, addAddress, updateAddress, deleteAddress, setDefaultAddress } = useApp()
   const addresses = user?.addresses || []
 
-  const [mode, setMode] = useState<'list' | 'create'>(addresses.length === 0 ? 'create' : 'list')
+  const [mode, setMode] = useState<'list' | 'form'>(addresses.length === 0 ? 'form' : 'list')
+  const [editingAddress, setEditingAddress] = useState<Address | null>(null)
 
-  // Form states for creating new address
+  // Form states for creating / editing address
   const [fullName, setFullName] = useState('')
   const [phone, setPhone] = useState('')
   const [street, setStreet] = useState('')
@@ -64,8 +68,9 @@ export const AddressBookModal: React.FC<AddressBookModalProps> = ({
   // Auto switch mode when opening modal
   useEffect(() => {
     if (isOpen) {
-      setMode(addresses.length === 0 ? 'create' : 'list')
-      // Reset create form state
+      setMode(addresses.length === 0 ? 'form' : 'list')
+      setEditingAddress(null)
+      // Reset form state
       setFullName(user?.name || '')
       setPhone(user?.phone || '')
       setStreet('')
@@ -97,6 +102,79 @@ export const AddressBookModal: React.FC<AddressBookModalProps> = ({
       isMounted = false
     }
   }, [isOpen])
+
+  // Start Create new address
+  const handleStartCreate = () => {
+    setEditingAddress(null)
+    setFullName(user?.name || '')
+    setPhone(user?.phone || '')
+    setStreet('')
+    setIsDefault(addresses.length === 0)
+    setSelectedProvince(null)
+    setSelectedDistrict(null)
+    setSelectedWard(null)
+    setDistricts([])
+    setWards([])
+    setMode('form')
+  }
+
+  // Start Edit existing address
+  const handleStartEdit = async (addr: Address) => {
+    setEditingAddress(addr)
+    setFullName(addr.fullName || '')
+    setPhone(addr.phone || '')
+    setStreet(addr.street || addr.detailAddress || '')
+    setIsDefault(Boolean(addr.isDefault))
+    setMode('form')
+
+    // Cascading GHN pre-fill
+    try {
+      let provList = provinces
+      if (provList.length === 0) {
+        setLoadingProvinces(true)
+        provList = await fetchProvinces()
+        setProvinces(provList)
+        setLoadingProvinces(false)
+      }
+
+      const matchedProv =
+        (addr.provinceId ? provList.find((p) => p.ProvinceID === addr.provinceId) : null) ||
+        (addr.province ? matchGhnLocation(addr.province, provList, 'ProvinceName', 'Code') : null) ||
+        null
+
+      setSelectedProvince(matchedProv)
+
+      if (matchedProv) {
+        setLoadingDistricts(true)
+        const distList = await fetchDistricts(matchedProv.ProvinceID)
+        setDistricts(distList)
+        setLoadingDistricts(false)
+
+        const matchedDist =
+          (addr.districtId ? distList.find((d) => d.DistrictID === addr.districtId) : null) ||
+          (addr.district ? matchGhnLocation(addr.district, distList, 'DistrictName', 'Code') : null) ||
+          null
+
+        setSelectedDistrict(matchedDist)
+
+        if (matchedDist) {
+          setLoadingWards(true)
+          const wardList = await fetchWards(matchedDist.DistrictID)
+          setWards(wardList)
+          setLoadingWards(false)
+
+          const matchedWard =
+            (addr.wardCode ? wardList.find((w) => String(w.WardCode) === String(addr.wardCode)) : null) ||
+            (addr.ward ? matchGhnLocation(addr.ward, wardList, 'WardName', 'WardCode') : null) ||
+            null
+
+          setSelectedWard(matchedWard)
+        }
+      }
+    } catch (err) {
+      console.error('Lỗi tải dữ liệu địa giới khi sửa:', err)
+    }
+  }
 
   // Handle Province Change
   const handleProvinceChange = async (provId: number) => {
@@ -148,8 +226,8 @@ export const AddressBookModal: React.FC<AddressBookModalProps> = ({
     setSelectedWard(w)
   }
 
-  // Handle Create Address Submit
-  const handleCreateAddress = async (e: React.FormEvent) => {
+  // Handle Form Submit (Create or Edit)
+  const handleSubmitForm = async (e: React.FormEvent) => {
     e.preventDefault()
 
     if (!fullName.trim()) {
@@ -192,15 +270,22 @@ export const AddressBookModal: React.FC<AddressBookModalProps> = ({
         ward_code: String(selectedWard.WardCode),
       }
 
-      const created = await addAddress(addressData)
-      if (created) {
-        onSelectAddress(created)
+      if (editingAddress) {
+        const updated = await updateAddress(editingAddress.id, addressData)
+        if (updated) {
+          onSelectAddress(updated)
+        }
       } else {
-        onSelectAddress({ ...addressData, id: `addr-${Date.now()}` })
+        const created = await addAddress(addressData)
+        if (created) {
+          onSelectAddress(created)
+        } else {
+          onSelectAddress({ ...addressData, id: `addr-${Date.now()}` })
+        }
       }
       onClose()
     } catch (err) {
-      console.error('Lỗi tạo địa chỉ:', err)
+      console.error('Lỗi lưu địa chỉ:', err)
       toast.error('Không thể lưu địa chỉ, vui lòng kiểm tra lại thông tin.')
     } finally {
       setSubmitting(false)
@@ -231,7 +316,7 @@ export const AddressBookModal: React.FC<AddressBookModalProps> = ({
             {/* Modal Header */}
             <div className="flex items-center justify-between border-b border-white/10 px-6 py-5">
               <div className="flex items-center gap-3">
-                {mode === 'create' && addresses.length > 0 && (
+                {mode === 'form' && addresses.length > 0 && (
                   <button
                     type="button"
                     onClick={() => setMode('list')}
@@ -245,11 +330,17 @@ export const AddressBookModal: React.FC<AddressBookModalProps> = ({
                 </div>
                 <div>
                   <h2 className="text-xl font-black tracking-tight text-white">
-                    {mode === 'list' ? 'Sổ địa chỉ nhận hàng' : 'Thêm địa chỉ giao hàng'}
+                    {mode === 'list'
+                      ? 'Sổ địa chỉ nhận hàng'
+                      : editingAddress
+                      ? 'Chỉnh sửa địa chỉ nhận hàng'
+                      : 'Thêm địa chỉ giao hàng'}
                   </h2>
                   <p className="text-xs text-slate-400">
                     {mode === 'list'
                       ? 'Chọn địa chỉ giao hàng hoặc tạo thêm địa chỉ mới'
+                      : editingAddress
+                      ? 'Cập nhật thông tin giao hàng chi tiết chuẩn GHN Express'
                       : 'Nhập thông tin giao hàng chi tiết chuẩn GHN Express'}
                   </p>
                 </div>
@@ -274,7 +365,7 @@ export const AddressBookModal: React.FC<AddressBookModalProps> = ({
                     </span>
                     <button
                       type="button"
-                      onClick={() => setMode('create')}
+                      onClick={handleStartCreate}
                       className="inline-flex items-center gap-1.5 rounded-xl bg-lime-400 px-3.5 py-1.5 text-xs font-bold text-slate-950 transition hover:bg-lime-300 cursor-pointer shadow-sm"
                     >
                       <Plus size={14} /> Thêm địa chỉ mới
@@ -291,47 +382,97 @@ export const AddressBookModal: React.FC<AddressBookModalProps> = ({
                       return (
                         <div
                           key={addr.id}
-                          onClick={() => {
-                            onSelectAddress(addr)
-                            onClose()
-                          }}
-                          className={`relative flex cursor-pointer items-start justify-between gap-3 rounded-2xl border p-4 transition ${
+                          className={`relative flex flex-col gap-3 rounded-2xl border p-4 transition ${
                             isSelected
                               ? 'border-lime-400 bg-lime-400/10 shadow-lg shadow-lime-400/5'
                               : 'border-white/10 bg-white/[0.03] hover:border-white/20 hover:bg-white/[0.06]'
                           }`}
                         >
-                          <div className="space-y-1.5 min-w-0 flex-1">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <span className="font-bold text-white text-sm flex items-center gap-1.5">
-                                <User size={14} className="text-lime-400" />
-                                {addr.fullName}
-                              </span>
-                              <span className="h-3 w-px bg-white/20" />
-                              <span className="font-mono text-xs text-slate-300 flex items-center gap-1">
-                                <Phone size={12} className="text-lime-400" />
-                                {addr.phone}
-                              </span>
-                              {addr.isDefault && (
-                                <span className="rounded-full border border-lime-400/30 bg-lime-400/10 px-2 py-0.5 font-mono text-[9px] font-bold text-lime-400">
-                                  Mặc định
+                          <div
+                            onClick={() => {
+                              onSelectAddress(addr)
+                              onClose()
+                            }}
+                            className="flex cursor-pointer items-start justify-between gap-3"
+                          >
+                            <div className="space-y-1.5 min-w-0 flex-1">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span className="font-bold text-white text-sm flex items-center gap-1.5">
+                                  <User size={14} className="text-lime-400" />
+                                  {addr.fullName}
                                 </span>
-                              )}
+                                <span className="h-3 w-px bg-white/20" />
+                                <span className="font-mono text-xs text-slate-300 flex items-center gap-1">
+                                  <Phone size={12} className="text-lime-400" />
+                                  {addr.phone}
+                                </span>
+                                {addr.isDefault && (
+                                  <span className="rounded-full border border-lime-400/30 bg-lime-400/10 px-2 py-0.5 font-mono text-[9px] font-bold text-lime-400">
+                                    Mặc định
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-xs text-slate-300 leading-relaxed pt-0.5">
+                                {fullAddrStr}
+                              </p>
                             </div>
-                            <p className="text-xs text-slate-300 leading-relaxed pt-0.5">
-                              {fullAddrStr}
-                            </p>
+
+                            <div className="shrink-0 pt-1">
+                              <div
+                                className={`grid h-6 w-6 place-items-center rounded-full border transition ${
+                                  isSelected
+                                    ? 'border-lime-400 bg-lime-400 text-slate-950'
+                                    : 'border-white/20 bg-transparent text-transparent'
+                                }`}
+                              >
+                                <Check size={14} className="stroke-[3]" />
+                              </div>
+                            </div>
                           </div>
 
-                          <div className="shrink-0 pt-1">
-                            <div
-                              className={`grid h-6 w-6 place-items-center rounded-full border transition ${
-                                isSelected
-                                  ? 'border-lime-400 bg-lime-400 text-slate-950'
-                                  : 'border-white/20 bg-transparent text-transparent'
-                              }`}
-                            >
-                              <Check size={14} className="stroke-[3]" />
+                          {/* Actions: Set Default, Edit & Delete */}
+                          <div className="flex items-center justify-between border-t border-white/5 pt-2 text-xs">
+                            {!addr.isDefault ? (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  setDefaultAddress(addr.id)
+                                }}
+                                className="font-bold text-lime-300 hover:text-lime-200 hover:underline cursor-pointer text-[11px]"
+                              >
+                                Đặt làm mặc định
+                              </button>
+                            ) : (
+                              <span className="text-slate-500 font-medium text-[11px]">
+                                Địa chỉ mặc định
+                              </span>
+                            )}
+
+                            <div className="flex items-center gap-1.5 ml-auto">
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  handleStartEdit(addr)
+                                }}
+                                className="flex items-center gap-1 text-slate-300 hover:text-lime-300 transition cursor-pointer text-[11px] px-2 py-1 rounded-lg hover:bg-white/5"
+                                title="Sửa địa chỉ này"
+                              >
+                                <Edit3 size={13} /> Sửa
+                              </button>
+                              <span className="text-white/10">|</span>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  deleteAddress(addr.id)
+                                }}
+                                className="flex items-center gap-1 text-slate-400 hover:text-rose-400 transition cursor-pointer text-[11px] px-2 py-1 rounded-lg hover:bg-white/5"
+                                title="Xóa địa chỉ này"
+                              >
+                                <Trash2 size={13} /> Xóa
+                              </button>
                             </div>
                           </div>
                         </div>
@@ -340,8 +481,8 @@ export const AddressBookModal: React.FC<AddressBookModalProps> = ({
                   </div>
                 </div>
               ) : (
-                /* Mode Create Form */
-                <form onSubmit={handleCreateAddress} className="space-y-4">
+                /* Mode Create / Edit Form */
+                <form onSubmit={handleSubmitForm} className="space-y-4">
                   {/* Full Name & Phone */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
@@ -520,7 +661,8 @@ export const AddressBookModal: React.FC<AddressBookModalProps> = ({
                         <Loader2 size={16} className="animate-spin" />
                       ) : (
                         <>
-                          <Check size={16} className="stroke-[2.5]" /> Lưu & Chọn địa chỉ này
+                          <Check size={16} className="stroke-[2.5]" />{' '}
+                          {editingAddress ? 'Cập nhật & Chọn địa chỉ này' : 'Lưu & Chọn địa chỉ này'}
                         </>
                       )}
                     </button>

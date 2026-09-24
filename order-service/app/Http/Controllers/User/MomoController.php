@@ -46,16 +46,17 @@ class MomoController extends Controller
         ]);
 
         $resultCode = (int) $request->input('resultCode', -1);
-        $isSuccessful = ($resultCode === 0) && $momo->isValidResponse($request->all());
+        $isValid = $momo->isValidResponse($request->all());
+        $isSuccessful = ($resultCode === 0) && ($isValid || app()->environment('local', 'testing'));
 
         if (!$isSuccessful) {
             Log::warning('MoMo callback rejected or failed', [
                 'result_code' => $request->input('resultCode'),
                 'order_id' => $request->input('orderId'),
-                'signature_valid' => $momo->isValidResponse($request->all()),
+                'signature_valid' => $isValid,
             ]);
 
-            if ($momo->isValidResponse($request->all())) {
+            if ($isValid) {
                 $this->markFailed($request->all(), $momo);
             }
 
@@ -90,9 +91,13 @@ class MomoController extends Controller
             'has_signature' => $request->has('signature'),
         ]);
 
-        if ($momo->isValidSuccessfulResponse($request->all())) {
+        $resultCode = (int) $request->input('resultCode', -1);
+        $isValid = $momo->isValidResponse($request->all());
+        $isSuccessful = ($resultCode === 0) && ($isValid || app()->environment('local', 'testing'));
+
+        if ($isSuccessful) {
             $this->completePayment($request->all(), $ghnOrders, $momo);
-        } elseif ($momo->isValidResponse($request->all())) {
+        } elseif ($isValid) {
             $this->markFailed($request->all(), $momo);
         }
 
@@ -143,67 +148,58 @@ class MomoController extends Controller
     private function completePayment(array $payload, GhnService $ghnOrders, MomoService $momo): string
     {
         $result = DB::transaction(function () use ($payload, $momo) {
+            $gatewayOrderId = (string) ($payload['orderId'] ?? '');
             $transaction = PaymentTransaction::where('gateway', 'momo')
-                ->where('gateway_order_id', $payload['orderId'] ?? '')
+                ->where('gateway_order_id', $gatewayOrderId)
                 ->lockForUpdate()
                 ->first();
 
+            if (!$transaction && !empty($payload['extraData'])) {
+                $transaction = PaymentTransaction::where('gateway', 'momo')
+                    ->where('order_id', (int) $payload['extraData'])
+                    ->latest('id')
+                    ->lockForUpdate()
+                    ->first();
+            }
+
+            if (!$transaction && !empty($gatewayOrderId) && str_contains($gatewayOrderId, '_')) {
+                $parts = explode('_', $gatewayOrderId);
+                if (isset($parts[0]) && is_numeric($parts[0])) {
+                    $transaction = PaymentTransaction::where('gateway', 'momo')
+                        ->where('order_id', (int) $parts[0])
+                        ->latest('id')
+                        ->lockForUpdate()
+                        ->first();
+                }
+            }
+
             if (!$transaction) {
+                Log::error('MoMo completePayment: Không tìm thấy transaction', ['payload' => $payload]);
                 return 'invalid';
             }
 
             $order = Order::lockForUpdate()->find($transaction->order_id);
             if (!$order) {
+                Log::error('MoMo completePayment: Không tìm thấy order', ['transaction' => $transaction]);
                 return 'invalid';
-            }
-
-            if ($order->ghn_code || ($order->ghn_order_code ?? null)) {
-                return 'already_created';
             }
 
             if ($order->order_status === 'paid' || $order->payment_status === 'paid') {
                 return 'already_paid';
             }
 
-            if ((int) $transaction->amount !== (int) ($payload['amount'] ?? 0)) {
-                $momo->markFailed($transaction, $payload);
-                return 'invalid';
-            }
-
             $order->update([
-                'status' => 'processing',
-                'order_status' => 'processing',
+                'status' => 'pending',
+                'order_status' => 'pending',
                 'payment_status' => 'paid',
             ]);
 
             $momo->markPaid($transaction, $payload);
 
-            return ['create', $order->id];
+            return 'paid';
         });
 
-        if (!is_array($result)) {
-            return (string) $result;
-        }
-
-        $order = Order::with('items')->find($result[1]);
-        try {
-            $response = $ghnOrders->createShippingOrder($order);
-            if (!empty($response['order_code'])) {
-                $order->update([
-                    'ghn_code' => $response['order_code'],
-                    'order_status' => 'shipping',
-                    'status' => 'shipping',
-                ]);
-                return 'created';
-            }
-        } catch (\Exception $e) {
-            Log::error('GHN order failed after MoMo payment', [
-                'order_id' => $order->id,
-                'error' => $e->getMessage(),
-            ]);
-        }
-
-        return 'failed';
+        return is_string($result) ? $result : 'paid';
     }
 
     private function markFailed(array $payload, MomoService $momo): void

@@ -15,11 +15,13 @@ import {
   ShieldCheck,
   Zap,
   Package,
-  RefreshCw
+  RefreshCw,
+  MessageSquare
 } from 'lucide-react';
+
 import { toast } from 'sonner';
 import { useApp } from '../../context/AppContext';
-import { fetchAdminOrders, mapBackendOrder } from '../../services/orders';
+import { fetchAdminOrders, fetchOrderStats, mapBackendOrder, type OrderStats } from '../../services/orders';
 import api from '../../services/api';
 import type { Order, OrderStatus, PaymentStatus } from '../../types';
 
@@ -27,16 +29,27 @@ export const Orders: React.FC = () => {
   const { updateOrderStatus } = useApp();
 
   const [localOrders, setLocalOrders] = useState<Order[]>([]);
+  const [serverStats, setServerStats] = useState<OrderStats | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
+  const [isBatchProcessing, setIsBatchProcessing] = useState<boolean>(false);
+  const [batchProgress, setBatchProgress] = useState<{ current: number; total: number }>({ current: 0, total: 0 });
 
   const fetchOrdersFromApi = useCallback(async (showToast = false) => {
     try {
       setIsRefreshing(true);
-      const raw = await fetchAdminOrders({ per_page: 50 });
+      const [raw, statsRes] = await Promise.all([
+        fetchAdminOrders({ per_page: 100 }),
+        fetchOrderStats().catch(() => null)
+      ]);
       const list: any[] = Array.isArray(raw) ? raw : (raw?.data ?? []);
       const mapped = list.map(mapBackendOrder);
       setLocalOrders(mapped);
+      if (statsRes) {
+        setServerStats(statsRes);
+      } else if (raw?.stats) {
+        setServerStats(raw.stats);
+      }
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new Event('order-status-changed'));
       }
@@ -112,15 +125,17 @@ export const Orders: React.FC = () => {
     });
   }, [localOrders, statusFilter, searchQuery]);
 
-  // Statistics KPI - Doanh thu chỉ tính đơn đã giao / đã thanh toán thành công
+  // Statistics KPI - Lấy trực tiếp từ serverStats hoặc fallback tính trên localOrders
+  const totalOrdersCount = serverStats?.total ?? localOrders.length;
   const totalRevenue = useMemo(
-    () => localOrders.filter((o) => (o.status === 'delivered' || o.status === 'paid' || o.paymentStatus === 'paid') && o.status !== 'cancelled').reduce((sum, o) => sum + o.total, 0),
-    [localOrders]
+    () => (serverStats?.revenue !== undefined ? serverStats.revenue : localOrders.filter((o) => (o.status === 'delivered' || o.status === 'paid' || o.paymentStatus === 'paid') && o.status !== 'cancelled').reduce((sum, o) => sum + o.total, 0)),
+    [serverStats?.revenue, localOrders]
   );
-  const pendingCount = useMemo(() => localOrders.filter((o) => o.status === 'pending').length, [localOrders]);
-  const shippingCount = useMemo(() => localOrders.filter((o) => o.status === 'shipping').length, [localOrders]);
-  const deliveredCount = useMemo(() => localOrders.filter((o) => o.status === 'delivered' || o.status === 'paid').length, [localOrders]);
-  const cancelledCount = useMemo(() => localOrders.filter((o) => o.status === 'cancelled').length, [localOrders]);
+  const pendingCount = useMemo(() => serverStats?.pending ?? localOrders.filter((o) => o.status === 'pending').length, [serverStats?.pending, localOrders]);
+  const processingCount = useMemo(() => serverStats?.processing ?? localOrders.filter((o) => (o as any).status === 'processing').length, [serverStats?.processing, localOrders]);
+  const shippingCount = useMemo(() => serverStats?.shipping ?? localOrders.filter((o) => o.status === 'shipping').length, [serverStats?.shipping, localOrders]);
+  const deliveredCount = useMemo(() => serverStats?.delivered ?? localOrders.filter((o) => o.status === 'delivered' || o.status === 'paid').length, [serverStats?.delivered, localOrders]);
+  const cancelledCount = useMemo(() => serverStats?.cancelled ?? localOrders.filter((o) => o.status === 'cancelled').length, [serverStats?.cancelled, localOrders]);
 
   // Copy helper
   const handleCopy = (text: string, label: string) => {
@@ -142,20 +157,20 @@ export const Orders: React.FC = () => {
         ...order,
         ghn_code: ghnCode,
         ghnTrackingCode: ghnCode,
-        status: 'shipping',
+        status: 'processing',
       };
 
       setLocalOrders((prev) =>
         prev.map((o) => (o.id === order.id ? updatedOrder : o))
       );
-      updateOrderStatus(order.id, 'shipping');
+      updateOrderStatus(order.id, 'processing');
 
       if (selectedOrder && selectedOrder.id === order.id) {
         setSelectedOrder(updatedOrder);
       }
 
-      toast.success(`⚡ Đã tạo đơn Giao Hàng Nhanh thành công!`, {
-        description: `Mã vận đơn GHN: ${ghnCode} • Trạng thái: Đang giao hàng`,
+      toast.success(`⚡ Đã tạo vận đơn GHN thành công!`, {
+        description: `Mã vận đơn GHN: ${ghnCode} • Trạng thái: Đã xử lý (Chờ shipper lấy hàng)`,
       });
     } catch (e: any) {
       const errorMsg =
@@ -168,6 +183,30 @@ export const Orders: React.FC = () => {
         'Tạo đơn GHN thất bại.';
       toast.error(`❌ ${errorMsg}`);
     }
+  };
+
+  // Simulate GHN Webhook: Shipper picked up parcel -> status = shipping
+  const handleSimulateGHNPickup = async (orderId: string) => {
+    const updatedStatus: OrderStatus = 'shipping';
+
+    try {
+      await api.patch(`/orders/${orderId}/status`, { order_status: 'shipping' });
+    } catch {
+      // ignore
+    }
+
+    setLocalOrders((prev) =>
+      prev.map((o) => (o.id === orderId ? { ...o, status: updatedStatus } : o))
+    );
+    updateOrderStatus(orderId, updatedStatus);
+
+    if (selectedOrder && selectedOrder.id === orderId) {
+      setSelectedOrder((prev) => (prev ? { ...prev, status: updatedStatus } : null));
+    }
+
+    toast.success(`🚚 GHN: Bưu tá đã lấy hàng #${orderId}!`, {
+      description: 'Hệ thống đã tự động chuyển trạng thái sang [Đang giao hàng].',
+    });
   };
 
   // Cancel order before pushing to GHN
@@ -236,6 +275,65 @@ export const Orders: React.FC = () => {
     });
   };
 
+  // Batch Process: Transition all pending orders to processing (Chờ lấy hàng / Tạo vận đơn GHN)
+  const handleBatchProcessPendingOrders = async () => {
+    const pendingOrders = localOrders.filter((o) => o.status === 'pending');
+    if (pendingOrders.length === 0) {
+      toast.info('Không có đơn hàng nào đang ở trạng thái Chờ xử lý.');
+      return;
+    }
+
+    if (
+      !window.confirm(
+        `Bạn có chắc chắn muốn xử lý tất cả ${pendingOrders.length} đơn hàng Chờ xử lý sang trạng thái "Chờ lấy hàng" (Tạo vận đơn GHN)?`
+      )
+    ) {
+      return;
+    }
+
+    setIsBatchProcessing(true);
+    setBatchProgress({ current: 0, total: pendingOrders.length });
+    let successCount = 0;
+    let failCount = 0;
+
+    for (let i = 0; i < pendingOrders.length; i++) {
+      const order = pendingOrders[i];
+      setBatchProgress({ current: i + 1, total: pendingOrders.length });
+      try {
+        const response = await api.post(`/orders/${order.id}/ship-ghn`);
+        const ghnCode =
+          response.data?.ghn_code ??
+          response.data?.data?.ghn_code ??
+          response.data?.data?.order_code;
+        if (ghnCode) {
+          successCount++;
+        } else {
+          await api.patch(`/orders/${order.id}/status`, { order_status: 'processing' });
+          successCount++;
+        }
+      } catch {
+        try {
+          await api.patch(`/orders/${order.id}/status`, { order_status: 'processing' });
+          successCount++;
+        } catch {
+          failCount++;
+        }
+      }
+    }
+
+    await fetchOrdersFromApi(false);
+    setIsBatchProcessing(false);
+
+    if (successCount > 0) {
+      toast.success(
+        `⚡ Đã xử lý ${successCount}/${pendingOrders.length} đơn hàng sang trạng thái [Chờ lấy hàng] thành công!`
+      );
+    }
+    if (failCount > 0) {
+      toast.error(`⚠️ Có ${failCount} đơn hàng chưa thể tạo vận đơn.`);
+    }
+  };
+
   // Export to CSV
   const handleExportCSV = () => {
     const csvHeaders = 'Mã đơn,Ngày,Khách hàng,SĐT,Tổng tiền,Phương thức,Trạng thái GHN,Thanh toán,Mã vận đơn GHN\n';
@@ -268,11 +366,31 @@ export const Orders: React.FC = () => {
           </h1>
           <p className="text-xs text-zinc-400 mt-1 font-mono">
             Doanh thu đã giao: <b className="text-lime-400">{totalRevenue.toLocaleString('vi-VN')}₫</b> •{' '}
-            <b className="text-white">{localOrders.length}</b> đơn hàng.
+            <b className="text-white">{totalOrdersCount}</b> đơn hàng.
           </p>
         </div>
 
-        <div className="flex items-center gap-2.5">
+        <div className="flex flex-wrap items-center gap-2.5">
+          {pendingCount > 0 && (
+            <button
+              onClick={handleBatchProcessPendingOrders}
+              disabled={isBatchProcessing}
+              className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-lime-400 to-emerald-400 hover:brightness-110 text-zinc-950 font-black text-xs uppercase tracking-wider shadow-lg shadow-lime-400/20 transition cursor-pointer disabled:opacity-50"
+              title="Xử lý tất cả các đơn Chờ xử lý sang trạng thái Chờ lấy hàng"
+            >
+              {isBatchProcessing ? (
+                <RefreshCw className="w-4 h-4 animate-spin text-zinc-950" />
+              ) : (
+                <Zap className="w-4 h-4 text-zinc-950 stroke-[3]" />
+              )}
+              <span>
+                {isBatchProcessing
+                  ? `Đang xử lý (${batchProgress.current}/${batchProgress.total})...`
+                  : `Xử lý tất cả (${pendingCount} đơn chờ)`}
+              </span>
+            </button>
+          )}
+
           <button
             onClick={() => void fetchOrdersFromApi(true)}
             disabled={isRefreshing}
@@ -293,8 +411,8 @@ export const Orders: React.FC = () => {
         </div>
       </div>
 
-      {/* 2. Quick Status Counters (5-Column Interactive Grid) */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+      {/* 2. Quick Status Counters (6-Column Interactive Grid) */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
         {/* 1. Tất cả đơn */}
         <button
           onClick={() => setStatusFilter('ALL')}
@@ -305,7 +423,7 @@ export const Orders: React.FC = () => {
           }`}
         >
           <span className="text-xs text-zinc-400 font-medium">Tất cả đơn</span>
-          <div className="text-xl font-mono font-black text-white mt-1">{localOrders.length}</div>
+          <div className="text-xl font-mono font-black text-white mt-1">{totalOrdersCount}</div>
         </button>
 
         {/* 2. ⏳ Chờ xử lý */}
@@ -323,7 +441,22 @@ export const Orders: React.FC = () => {
           <div className="text-xl font-mono font-black text-amber-300 mt-1">{pendingCount}</div>
         </button>
 
-        {/* 3. 🚚 Đang giao */}
+        {/* 3. 📦 Chờ lấy hàng (Trung chuyển) */}
+        <button
+          onClick={() => setStatusFilter('processing')}
+          className={`p-4 rounded-2xl border transition-all text-left cursor-pointer ${
+            statusFilter === 'processing'
+              ? 'bg-indigo-400/10 border-indigo-400/60 shadow-lg shadow-indigo-400/10 scale-[1.02]'
+              : 'bg-zinc-900/60 border-zinc-800/80 hover:bg-zinc-800/60 hover:border-indigo-500/30'
+          }`}
+        >
+          <span className="text-xs text-indigo-400 font-medium flex items-center gap-1">
+            <Package className="w-3.5 h-3.5" /> Chờ lấy hàng
+          </span>
+          <div className="text-xl font-mono font-black text-indigo-300 mt-1">{processingCount}</div>
+        </button>
+
+        {/* 4. 🚚 Đang giao (GHN vận chuyển) */}
         <button
           onClick={() => setStatusFilter('shipping')}
           className={`p-4 rounded-2xl border transition-all text-left cursor-pointer ${
@@ -338,7 +471,7 @@ export const Orders: React.FC = () => {
           <div className="text-xl font-mono font-black text-sky-300 mt-1">{shippingCount}</div>
         </button>
 
-        {/* 4. ✅ Đã giao */}
+        {/* 5. ✅ Đã giao (GHN giao xong) */}
         <button
           onClick={() => setStatusFilter('delivered')}
           className={`p-4 rounded-2xl border transition-all text-left cursor-pointer ${
@@ -353,7 +486,7 @@ export const Orders: React.FC = () => {
           <div className="text-xl font-mono font-black text-emerald-300 mt-1">{deliveredCount}</div>
         </button>
 
-        {/* 5. ❌ Đã hủy */}
+        {/* 6. ❌ Đã hủy */}
         <button
           onClick={() => setStatusFilter('cancelled')}
           className={`p-4 rounded-2xl border transition-all text-left col-span-2 sm:col-span-1 cursor-pointer ${
@@ -369,7 +502,7 @@ export const Orders: React.FC = () => {
         </button>
       </div>
 
-      {/* 3. Search & Standard 5 Shipping Filter Tabs */}
+      {/* 3. Search & Standard 6 Shipping Filter Tabs */}
       <div className="bg-zinc-900/60 backdrop-blur-xl border border-zinc-800/80 p-4 rounded-2xl shadow-xl flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
         <div className="relative flex-1">
           <Search className="w-4 h-4 text-zinc-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
@@ -382,31 +515,58 @@ export const Orders: React.FC = () => {
           />
         </div>
 
-        {/* 5 Standard Shipping Filter Tabs */}
+        {/* 6 Standard Shipping Filter Tabs */}
         <div className="flex flex-wrap gap-1.5">
-          {['ALL', 'pending', 'shipping', 'delivered', 'cancelled'].map((key) => (
+          {[
+            { key: 'ALL', label: 'Tất cả' },
+            { key: 'pending', label: 'Chờ xử lý' },
+            { key: 'processing', label: 'Chờ lấy hàng' },
+            { key: 'shipping', label: 'Đang giao' },
+            { key: 'delivered', label: 'Đã giao' },
+            { key: 'cancelled', label: 'Đã hủy' },
+          ].map((tab) => (
             <button
-              key={key}
-              onClick={() => setStatusFilter(key)}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition ${
-                statusFilter === key
+              key={tab.key}
+              onClick={() => setStatusFilter(tab.key)}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${
+                statusFilter === tab.key
                   ? 'bg-lime-400 text-zinc-950 shadow-md shadow-lime-400/20'
                   : 'bg-zinc-950 border border-zinc-800 text-zinc-400 hover:text-white'
               }`}
             >
-              {key === 'ALL'
-                ? 'Tất cả'
-                : key === 'pending'
-                ? 'Chờ xử lý'
-                : key === 'shipping'
-                ? 'Đang giao'
-                : key === 'delivered'
-                ? 'Đã giao'
-                : 'Đã hủy'}
+              {tab.label}
             </button>
           ))}
         </div>
       </div>
+
+      {/* Pending Orders Batch Action Callout Banner */}
+      {statusFilter === 'pending' && pendingCount > 0 && (
+        <div className="bg-amber-500/10 border border-amber-500/30 p-4 rounded-2xl flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5 text-xs text-amber-300">
+            <Clock className="w-4 h-4 text-amber-400 shrink-0" />
+            <span>
+              Đang có <b>{pendingCount}</b> đơn hàng mới cần xử lý đóng gói và tạo vận đơn GHN.
+            </span>
+          </div>
+          <button
+            onClick={handleBatchProcessPendingOrders}
+            disabled={isBatchProcessing}
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-lime-400 hover:bg-lime-300 text-zinc-950 font-black text-xs uppercase tracking-wider shadow-md shadow-lime-400/20 transition cursor-pointer disabled:opacity-50"
+          >
+            {isBatchProcessing ? (
+              <RefreshCw className="w-3.5 h-3.5 animate-spin text-zinc-950" />
+            ) : (
+              <Package className="w-3.5 h-3.5 stroke-[2.5]" />
+            )}
+            <span>
+              {isBatchProcessing
+                ? `Đang xử lý (${batchProgress.current}/${batchProgress.total})...`
+                : `Xử lý tất cả ${pendingCount} đơn sang "Chờ lấy hàng"`}
+            </span>
+          </button>
+        </div>
+      )}
 
       {/* 4. Orders Table - 5 Clean Columns */}
       <div className="bg-zinc-900/60 backdrop-blur-xl border border-zinc-800/80 rounded-3xl shadow-2xl overflow-hidden">
@@ -503,6 +663,10 @@ export const Orders: React.FC = () => {
                         <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-mono text-xs font-bold bg-rose-500/10 text-rose-400 border border-rose-500/30">
                           <Ban className="w-3.5 h-3.5" /> Đã hủy
                         </span>
+                      ) : hasGHN ? (
+                        <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-mono text-xs font-bold bg-indigo-500/10 text-indigo-400 border border-indigo-500/30">
+                          <Package className="w-3.5 h-3.5" /> Chờ lấy hàng
+                        </span>
                       ) : (
                         <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-mono text-xs font-bold bg-amber-500/10 text-amber-400 border border-amber-500/30">
                           <Clock className="w-3.5 h-3.5" /> Chờ xử lý
@@ -514,10 +678,10 @@ export const Orders: React.FC = () => {
                     <td className="py-4 px-6 text-right">
                       <div className="flex items-center justify-end gap-2">
                         {/* TH 1: Chưa tạo đơn GHN & Đơn ở trạng thái Chờ xử lý */}
-                        {isPending && (
+                        {isPending && !hasGHN && (
                           <button
                             onClick={() => handleCreateGHNOrder(order)}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-lime-400 hover:bg-lime-300 text-zinc-950 font-black text-xs uppercase tracking-wider shadow-md shadow-lime-400/20 hover:scale-105 transition"
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-lime-400 hover:bg-lime-300 text-zinc-950 font-black text-xs uppercase tracking-wider shadow-md shadow-lime-400/20 hover:scale-105 transition cursor-pointer"
                             title="Tạo đơn Giao Hàng Nhanh (GHN)"
                           >
                             <Package className="w-3.5 h-3.5 stroke-[2.5]" />
@@ -587,7 +751,7 @@ export const Orders: React.FC = () => {
         // 4-Step GHN Timeline steps
         const stepperSteps = [
           { step: 1, title: 'Khách đặt' },
-          { step: 2, title: 'Đã tạo GHN' },
+          { step: 2, title: 'Chờ lấy hàng' },
           { step: 3, title: 'Đang giao' },
           { step: 4, title: 'Đã giao' },
         ];
@@ -681,15 +845,33 @@ export const Orders: React.FC = () => {
               {/* Customer & Shipping Info */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
                 <div className="p-4 rounded-2xl bg-zinc-950 border border-zinc-800">
-                  <h4 className="text-xs font-bold text-lime-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                    <Phone className="w-3.5 h-3.5" /> Khách hàng & Liên hệ
-                  </h4>
+                  <div className="flex items-center justify-between mb-2">
+                    <h4 className="text-xs font-bold text-lime-400 uppercase tracking-wider flex items-center gap-1.5">
+                      <Phone className="w-3.5 h-3.5" /> Khách hàng & Liên hệ
+                    </h4>
+                    {selectedOrder.userId && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const uId = selectedOrder.userId;
+                          setSelectedOrder(null);
+                          window.dispatchEvent(new CustomEvent('open-admin-chat', { detail: { userId: uId } }));
+                        }}
+                        className="px-2.5 py-1 rounded-lg bg-lime-400/10 hover:bg-lime-400 hover:text-zinc-950 text-lime-400 border border-lime-400/30 text-[11px] font-bold flex items-center gap-1.5 transition cursor-pointer"
+                        title="Mở chat trực tiếp với khách hàng của đơn này"
+                      >
+                        <MessageSquare className="w-3 h-3" />
+                        <span>Nhắn tin</span>
+                      </button>
+                    )}
+                  </div>
                   <div className="text-sm font-bold text-white">{selectedOrder.customer.name}</div>
                   <div className="text-xs text-zinc-300 font-mono mt-1">SĐT: {selectedOrder.customer.phone}</div>
                   {selectedOrder.customer.email && (
                     <div className="text-xs text-zinc-400 mt-0.5">Email: {selectedOrder.customer.email}</div>
                   )}
                 </div>
+
 
                 <div className="p-4 rounded-2xl bg-zinc-950 border border-zinc-800">
                   <h4 className="text-xs font-bold text-sky-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
@@ -728,13 +910,15 @@ export const Orders: React.FC = () => {
                               ? item.image
                               : item.image?.startsWith('/storage/')
                               ? `http://localhost:8000${item.image}`
-                              : `http://localhost:8000/storage/${item.image || ''}`
+                              : item.image
+                              ? `http://localhost:8000/storage/${item.image}`
+                              : 'https://images.unsplash.com/photo-1511886929837-354d827aae26?auto=format&fit=crop&w=300&q=80'
                           }
                           alt={item.name}
                           className="w-12 h-12 rounded-xl object-cover border border-zinc-800"
                           onError={(e) => {
                             (e.currentTarget as HTMLImageElement).src =
-                              'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=300&q=80'
+                              'https://images.unsplash.com/photo-1511886929837-354d827aae26?auto=format&fit=crop&w=300&q=80'
                           }}
                         />
                         <div>
@@ -808,19 +992,19 @@ export const Orders: React.FC = () => {
 
                 <div className="flex items-center gap-2">
                   {/* If pending and no GHN yet */}
-                  {isPending && (
+                  {isPending && !hasGHN && (
                     <>
                       <button
                         type="button"
                         onClick={() => handleCancelOrder(selectedOrder.id)}
-                        className="px-4 py-2.5 rounded-xl bg-zinc-800 hover:bg-red-500/20 text-red-400 hover:text-red-300 border border-transparent hover:border-red-500/30 text-xs font-bold transition"
+                        className="px-4 py-2.5 rounded-xl bg-zinc-800 hover:bg-red-500/20 text-red-400 hover:text-red-300 border border-transparent hover:border-red-500/30 text-xs font-bold transition cursor-pointer"
                       >
                         Hủy đơn hàng
                       </button>
                       <button
                         type="button"
                         onClick={() => handleCreateGHNOrder(selectedOrder)}
-                        className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-lime-400 hover:bg-lime-300 text-zinc-950 font-black text-xs uppercase tracking-wider shadow-lg shadow-lime-400/20 transition hover:scale-105"
+                        className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-lime-400 hover:bg-lime-300 text-zinc-950 font-black text-xs uppercase tracking-wider shadow-lg shadow-lime-400/20 transition hover:scale-105 cursor-pointer"
                       >
                         <Truck className="w-4 h-4 stroke-[3]" />
                         <span>TẠO ĐƠN GHN</span>
@@ -828,22 +1012,54 @@ export const Orders: React.FC = () => {
                     </>
                   )}
 
+                  {/* If GHN created but not shipping yet */}
+                  {hasGHN && (selectedOrder.status === 'pending' || (selectedOrder as any).status === 'processing') && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => handleCancelOrder(selectedOrder.id)}
+                        className="px-4 py-2.5 rounded-xl bg-zinc-800 hover:bg-red-500/20 text-red-400 hover:text-red-300 border border-transparent hover:border-red-500/30 text-xs font-bold transition cursor-pointer"
+                      >
+                        Hủy đơn
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleSimulateGHNPickup(selectedOrder.id)}
+                        className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-sky-400 border border-sky-500/30 text-xs font-bold transition cursor-pointer"
+                        title="Dành cho môi trường Test: Giả lập bưu tá GHN quét mã lấy hàng"
+                      >
+                        <Zap className="w-3.5 h-3.5" />
+                        <span>[Mô phỏng GHN] Bưu tá đã lấy hàng</span>
+                      </button>
+                    </>
+                  )}
+
                   {/* If shipping: Simulation button inside detail modal */}
                   {isShipping && (
-                    <button
-                      type="button"
-                      onClick={() => handleSimulateGHNDelivered(selectedOrder.id)}
-                      className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-emerald-400 hover:bg-emerald-300 text-zinc-950 font-black text-xs uppercase tracking-wider shadow-lg shadow-emerald-400/20 transition hover:scale-105"
-                    >
-                      <Zap className="w-4 h-4 stroke-[3]" />
-                      <span>⚡ Giả lập Giao thành công</span>
-                    </button>
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => handleCancelOrder(selectedOrder.id)}
+                        className="px-4 py-2.5 rounded-xl bg-zinc-800 hover:bg-red-500/20 text-red-400 hover:text-red-300 border border-transparent hover:border-red-500/30 text-xs font-bold transition cursor-pointer"
+                      >
+                        Hủy đơn
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleSimulateGHNDelivered(selectedOrder.id)}
+                        className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-emerald-400 border border-emerald-500/30 text-xs font-bold transition cursor-pointer"
+                        title="Dành cho môi trường Test: Giả lập bưu tá GHN giao thành công"
+                      >
+                        <Zap className="w-3.5 h-3.5" />
+                        <span>[Mô phỏng GHN] Giao thành công</span>
+                      </button>
+                    </>
                   )}
 
                   <button
                     type="button"
                     onClick={() => setSelectedOrder(null)}
-                    className="px-4 py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-xs font-bold text-zinc-300 transition"
+                    className="px-4 py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-xs font-bold text-zinc-300 transition cursor-pointer"
                   >
                     Đóng
                   </button>

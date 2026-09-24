@@ -64,8 +64,12 @@ export function Checkout() {
   const [addressModalOpen, setAddressModalOpen] = useState(false)
 
   useEffect(() => {
-    if (!selectedAddress && user?.addresses && user.addresses.length > 0) {
-      setSelectedAddress(user.addresses.find((a) => a.isDefault) || user.addresses[0])
+    if (user?.addresses && user.addresses.length > 0) {
+      if (!selectedAddress || !user.addresses.some((a) => a.id === selectedAddress.id)) {
+        setSelectedAddress(user.addresses.find((a) => a.isDefault) || user.addresses[0])
+      }
+    } else if (user?.addresses && user.addresses.length === 0) {
+      setSelectedAddress(null)
     }
   }, [user?.addresses, selectedAddress])
 
@@ -261,6 +265,7 @@ export function Checkout() {
             selectedSize: item.selectedSize,
             selectedColor: item.selectedColor,
             sku: item.sku || `STR-${item.id}`,
+            image: item.image || (item as any).image_url || '',
           })),
         })
 
@@ -581,13 +586,15 @@ export function Checkout() {
                         ? item.image
                         : item.image?.startsWith('/storage/')
                         ? `http://localhost:8000${item.image}`
-                        : `http://localhost:8000/storage/${item.image || ''}`
+                        : item.image
+                        ? `http://localhost:8000/storage/${item.image}`
+                        : 'https://images.unsplash.com/photo-1511886929837-354d827aae26?auto=format&fit=crop&w=300&q=80'
                     }
                     alt={item.name}
                     className="h-14 w-14 shrink-0 rounded-xl object-cover border border-white/10 bg-slate-900"
                     onError={(e) => {
                       (e.currentTarget as HTMLImageElement).src =
-                        'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=300&q=80'
+                        'https://images.unsplash.com/photo-1511886929837-354d827aae26?auto=format&fit=crop&w=300&q=80'
                     }}
                   />
                   <div className="min-w-0 flex-1">

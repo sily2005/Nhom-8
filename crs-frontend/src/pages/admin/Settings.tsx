@@ -41,10 +41,6 @@ export const INITIAL_SHOP_SETTINGS: ShopSettings = {
   address: 'Tầng 5, Tòa nhà Bitexco, Số 2 Hải Triều, Phường Bến Nghé, Quận 1, TP. Hồ Chí Minh',
   workingHours: '08:00 - 22:00 (Tất cả các ngày trong tuần)',
   copyright: '© 2026 STRIKER SPORT PRO. All rights reserved.',
-  bankName: 'MB',
-  bankAccountNo: '0977777777',
-  bankAccountName: 'STRIKER SPORT PRO',
-  transferSyntax: 'STR {ORDER_ID}',
 };
 
 // Helpers to identify and ensure system default items

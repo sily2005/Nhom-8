@@ -40,6 +40,8 @@ Route::get('/shipping/provinces', [ShippingController::class, 'provinces']);
 Route::get('/shipping/districts', [ShippingController::class, 'districts']);
 Route::get('/shipping/wards', [ShippingController::class, 'wards']);
 Route::post('/shipping/fee', [ShippingController::class, 'calculateFee']);
+Route::post('/shipping/ghn/webhook', [ShippingController::class, 'webhook']);
+Route::post('/ghn/webhook', [ShippingController::class, 'webhook']);
 
 // MoMo Payment Routes
 Route::post('/payment/momo/ipn', [\App\Http\Controllers\User\MomoController::class, 'ipn'])->name('api.payment.momo.ipn');

@@ -18,13 +18,13 @@ return new class extends Migration
             $table->string('slug')->unique();
             $table->string('sku', 100)->unique();
             $table->string('brand')->index();
-            $table->text('description')->nullable();
+            $table->longText('description')->nullable();
 
             $table->decimal('price', 12, 2)->default(0);
             $table->decimal('old_price', 12, 2)->nullable();
             $table->unsignedInteger('stock')->default(0);
 
-            $table->string('image_url')->nullable();
+            $table->longText('image_url')->nullable();
             $table->json('images')->nullable();
 
             $table->json('colors')->nullable();

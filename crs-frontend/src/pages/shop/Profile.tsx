@@ -5,23 +5,19 @@ import {
   KeyRound,
   Lock,
   Mail,
-  MapPin,
   Phone,
-  Plus,
   Save,
   ShieldCheck,
-  Trash2,
   User as UserIcon,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { useApp } from '../../context/AppContext'
-import { AddressBookModal } from '../../components/AddressBookModal'
 import { updateProfile } from '../../services/auth'
 
 export function Profile() {
-  const { user, updateUserProfile, deleteAddress, setDefaultAddress } = useApp()
+  const { user, updateUserProfile } = useApp()
 
-  const [activeTab, setActiveTab] = useState<'info' | 'addresses' | 'password'>('info')
+  const [activeTab, setActiveTab] = useState<'info' | 'password'>('info')
 
   // Personal Info Form
   const [name, setName] = useState(user?.name ?? '')
@@ -33,9 +29,6 @@ export function Profile() {
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [savingPassword, setSavingPassword] = useState(false)
-
-  // Address Modal
-  const [addressModalOpen, setAddressModalOpen] = useState(false)
 
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -90,8 +83,6 @@ export function Profile() {
     }
   }
 
-  const addresses = user?.addresses || []
-
   return (
     <section className="min-h-screen bg-[#0B0E17] px-5 py-10 text-white lg:px-8">
       <div className="mx-auto max-w-4xl">
@@ -124,10 +115,6 @@ export function Profile() {
         <div className="mt-8 flex border-b border-white/10 gap-8 overflow-x-auto pb-1 scrollbar-none">
           {[
             { key: 'info', label: 'Thông tin cá nhân' },
-            {
-              key: 'addresses',
-              label: `Sổ địa chỉ (${addresses.length})`,
-            },
             { key: 'password', label: 'Đổi mật khẩu' },
           ].map((tab) => (
             <button
@@ -235,99 +222,7 @@ export function Profile() {
           </motion.div>
         )}
 
-        {/* Tab 2: Addresses */}
-        {activeTab === 'addresses' && (
-          <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="mt-8 space-y-6"
-          >
-            <div className="flex flex-wrap items-center justify-between gap-4">
-              <div>
-                <h2 className="text-lg font-black text-white">Sổ địa chỉ nhận hàng</h2>
-                <p className="text-xs text-slate-400">
-                  Quản lý danh sách địa chỉ giao hàng chuẩn GHN Express để thanh toán nhanh hơn
-                </p>
-              </div>
-
-              <button
-                onClick={() => setAddressModalOpen(true)}
-                className="flex items-center gap-2 rounded-2xl bg-lime-400 px-5 py-3 text-xs font-black text-slate-950 hover:bg-lime-300 transition shadow-md cursor-pointer"
-              >
-                <Plus size={16} /> Thêm địa chỉ mới
-              </button>
-            </div>
-
-            {addresses.length > 0 ? (
-              <div className="grid gap-4 sm:grid-cols-2">
-                {addresses.map((addr) => (
-                  <div
-                    key={addr.id}
-                    className={`relative rounded-3xl border p-5 transition backdrop-blur-sm ${
-                      addr.isDefault
-                        ? 'border-lime-400/60 bg-lime-400/5'
-                        : 'border-white/10 bg-[#131823]'
-                    }`}
-                  >
-                    {addr.isDefault && (
-                      <span className="absolute right-5 top-5 rounded-full bg-lime-400/20 border border-lime-400/40 px-2.5 py-0.5 text-[10px] font-bold text-lime-300">
-                        Địa chỉ mặc định
-                      </span>
-                    )}
-
-                    <div className="space-y-2 pr-16">
-                      <b className="text-sm text-white block">{addr.fullName}</b>
-                      <p className="text-xs text-slate-400 flex items-center gap-1.5">
-                        <Phone size={13} /> {addr.phone}
-                      </p>
-                      <p className="text-xs text-slate-300 leading-relaxed flex items-start gap-1.5">
-                        <MapPin size={14} className="shrink-0 text-lime-400 mt-0.5" />
-                        <span>
-                          {addr.street}, {addr.ward}, {addr.district}, {addr.province}
-                        </span>
-                      </p>
-                    </div>
-
-                    <div className="mt-5 flex items-center justify-between border-t border-white/10 pt-3 text-xs">
-                      {!addr.isDefault ? (
-                        <button
-                          onClick={() => setDefaultAddress(addr.id)}
-                          className="font-bold text-lime-300 hover:underline cursor-pointer"
-                        >
-                          Đặt làm mặc định
-                        </button>
-                      ) : (
-                        <span className="text-slate-500 font-semibold text-[11px]">
-                          Đang dùng cho đơn hàng
-                        </span>
-                      )}
-
-                      <button
-                        onClick={() => deleteAddress(addr.id)}
-                        className="flex items-center gap-1 text-slate-400 hover:text-rose-400 transition cursor-pointer"
-                      >
-                        <Trash2 size={13} /> Xóa
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="rounded-3xl border border-dashed border-white/15 bg-white/[0.02] p-8 text-center">
-                <p className="text-xs text-slate-400">Bạn chưa lưu địa chỉ giao hàng nào.</p>
-                <button
-                  type="button"
-                  onClick={() => setAddressModalOpen(true)}
-                  className="mt-3 inline-flex items-center gap-1.5 text-xs font-bold text-lime-400 hover:underline cursor-pointer"
-                >
-                  <Plus size={14} /> Thêm địa chỉ nhận hàng đầu tiên
-                </button>
-              </div>
-            )}
-          </motion.div>
-        )}
-
-        {/* Tab 3: Password */}
+        {/* Tab 2: Password */}
         {activeTab === 'password' && (
           <motion.div
             initial={{ opacity: 0, y: 10 }}
@@ -421,13 +316,6 @@ export function Profile() {
           </motion.div>
         )}
       </div>
-
-      {/* Shared Address Book Modal with GHN Cascading */}
-      <AddressBookModal
-        isOpen={addressModalOpen}
-        onClose={() => setAddressModalOpen(false)}
-        onSelectAddress={() => {}}
-      />
     </section>
   )
 }

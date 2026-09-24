@@ -10,7 +10,7 @@ return new class extends Migration {
             $table->id();
             $table->string('order_number', 50)->nullable()->unique();
             $table->string('order_code', 50)->unique();
-            $table->unsignedBigInteger('user_id')->index(); 
+            $table->unsignedBigInteger('user_id')->nullable()->index(); 
             $table->foreignId('coupon_id')->nullable()->constrained('coupons')->onDelete('set null');
             $table->string('shipping_name');
             $table->string('shipping_phone', 15);

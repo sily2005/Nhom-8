@@ -4,7 +4,9 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   CheckCircle2,
   Clock,
+  Copy,
   CreditCard,
+  ExternalLink,
   MapPin,
   Package,
   RotateCcw,
@@ -23,7 +25,7 @@ import type { Order, OrderStatus } from '../../types'
 
 const formatImgUrl = (url?: string): string => {
   if (!url || typeof url !== 'string' || url.trim() === '') {
-    return 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=300&q=80'
+    return 'https://images.unsplash.com/photo-1511886929837-354d827aae26?auto=format&fit=crop&w=300&q=80'
   }
   if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:')) {
     return url
@@ -49,17 +51,17 @@ const statusConfig: Record<
     step: 1,
   },
   processing: {
-    label: 'Đang xử lý',
-    bg: 'bg-sky-500/15',
-    text: 'text-sky-300',
-    border: 'border-sky-500/30',
+    label: 'Chờ lấy hàng',
+    bg: 'bg-indigo-500/15',
+    text: 'text-indigo-300',
+    border: 'border-indigo-500/30',
     step: 2,
   },
   shipping: {
     label: 'Đang giao hàng',
-    bg: 'bg-indigo-500/15',
-    text: 'text-indigo-300',
-    border: 'border-indigo-500/30',
+    bg: 'bg-sky-500/15',
+    text: 'text-sky-300',
+    border: 'border-sky-500/30',
     step: 3,
   },
   delivered: {
@@ -141,16 +143,15 @@ export function Orders() {
   }
 
   const [statusFilter, setStatusFilter] = useState<
-    'all' | 'pending' | 'shipping' | 'delivered' | 'cancelled'
+    'all' | 'pending' | 'processing' | 'shipping' | 'delivered' | 'cancelled'
   >('all')
 
   const filteredOrders = orders.filter((order) => {
     if (statusFilter === 'all') return true
-    if (statusFilter === 'pending')
-      return order.status === 'pending' || order.status === 'processing'
+    if (statusFilter === 'pending') return order.status === 'pending'
+    if (statusFilter === 'processing') return (order as any).status === 'processing'
     if (statusFilter === 'shipping') return order.status === 'shipping'
-    if (statusFilter === 'delivered')
-      return order.status === 'delivered' || order.status === 'paid'
+    if (statusFilter === 'delivered') return order.status === 'delivered' || order.status === 'paid'
     if (statusFilter === 'cancelled') return order.status === 'cancelled'
     return true
   })
@@ -214,10 +215,14 @@ export function Orders() {
             { key: 'all', label: `Tất cả (${orders.length})` },
             {
               key: 'pending',
-              label: `Đang xử lý (${
-                orders.filter(
-                  (o) => o.status === 'pending' || o.status === 'processing'
-                ).length
+              label: `Chờ xử lý (${
+                orders.filter((o) => o.status === 'pending').length
+              })`,
+            },
+            {
+              key: 'processing',
+              label: `Chờ lấy hàng (${
+                orders.filter((o) => (o as any).status === 'processing').length
               })`,
             },
             {
@@ -289,15 +294,17 @@ export function Orders() {
                     <div className="flex items-center gap-3">
                       {/* Thumbnail or fallback icon */}
                       {order.itemsList && order.itemsList[0]?.image ? (
-                        <img
-                          src={formatImgUrl(order.itemsList[0].image)}
-                          alt={order.itemsList[0].name}
-                          className="w-12 h-12 rounded-xl object-cover border border-slate-800"
-                          onError={(e) => {
-                            (e.currentTarget as HTMLImageElement).src =
-                              'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=300&q=80'
-                          }}
-                        />
+                        <Link to={`/product/${order.itemsList[0].id}`} className="block shrink-0">
+                          <img
+                            src={formatImgUrl(order.itemsList[0].image)}
+                            alt={order.itemsList[0].name}
+                            className="w-12 h-12 rounded-xl object-cover border border-slate-800 hover:border-lime-400/50 transition cursor-pointer"
+                            onError={(e) => {
+                              (e.currentTarget as HTMLImageElement).src =
+                                'https://images.unsplash.com/photo-1511886929837-354d827aae26?auto=format&fit=crop&w=300&q=80'
+                            }}
+                          />
+                        </Link>
                       ) : (
                         <div className="grid h-10 w-10 place-items-center rounded-2xl bg-white/5 border border-white/10 text-lime-400">
                           <Package size={20} />
@@ -348,6 +355,40 @@ export function Orders() {
                     </div>
                   </div>
 
+                  {/* GHN Tracking Bar if created */}
+                  {(order.ghn_code || order.ghnTrackingCode) && (
+                    <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-sky-500/30 bg-sky-950/30 px-3.5 py-2 text-xs">
+                      <div className="flex items-center gap-2 text-sky-300">
+                        <Truck size={15} className="text-sky-400 shrink-0" />
+                        <span>Mã vận đơn GHN Express:</span>
+                        <b className="font-mono text-white font-bold">{order.ghn_code || order.ghnTrackingCode}</b>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            const code = order.ghn_code || order.ghnTrackingCode || ''
+                            navigator.clipboard.writeText(code)
+                            toast.success(`Đã sao chép mã vận đơn GHN: ${code}`)
+                          }}
+                          className="flex items-center gap-1 rounded-lg bg-sky-500/20 px-2 py-1 font-mono text-[11px] font-bold text-sky-300 hover:bg-sky-500/30 hover:text-white transition cursor-pointer"
+                        >
+                          <Copy size={12} /> Copy
+                        </button>
+                        <a
+                          href={`https://donhang.ghn.vn/?order_code=${order.ghn_code || order.ghnTrackingCode}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={(e) => e.stopPropagation()}
+                          className="flex items-center gap-1 rounded-lg bg-sky-400 px-2.5 py-1 text-[11px] font-bold text-slate-950 hover:bg-sky-300 transition shadow-sm"
+                        >
+                          Tra cứu GHN <ExternalLink size={12} />
+                        </a>
+                      </div>
+                    </div>
+                  )}
+
                   {/* Order Representative Product (Single Primary Item) */}
                   {order.itemsList && order.itemsList.length > 0 && (() => {
                     const primaryItem = order.itemsList[0]
@@ -360,19 +401,23 @@ export function Orders() {
                       <div className="border-t border-white/10 my-4 pt-4">
                         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-2xl border border-white/5 bg-white/[0.02] p-3 text-xs">
                           <div className="flex items-center gap-3 min-w-0">
-                            <img
-                              src={formatImgUrl(primaryItem.image)}
-                              alt=""
-                              className="h-14 w-14 shrink-0 rounded-xl object-cover border border-white/10 bg-slate-900"
-                              onError={(e) => {
-                                (e.currentTarget as HTMLImageElement).src =
-                                  'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=300&q=80'
-                              }}
-                            />
+                            <Link to={`/product/${primaryItem.id}`} className="block shrink-0">
+                              <img
+                                src={formatImgUrl(primaryItem.image)}
+                                alt=""
+                                className="h-14 w-14 shrink-0 rounded-xl object-cover border border-white/10 bg-slate-900 hover:border-lime-400/50 transition cursor-pointer"
+                                onError={(e) => {
+                                  (e.currentTarget as HTMLImageElement).src =
+                                    'https://images.unsplash.com/photo-1511886929837-354d827aae26?auto=format&fit=crop&w=300&q=80'
+                                }}
+                              />
+                            </Link>
                             <div className="min-w-0">
-                              <h4 className="truncate font-bold text-white text-sm">
-                                {primaryItem.name}
-                              </h4>
+                              <Link to={`/product/${primaryItem.id}`} className="block group">
+                                <h4 className="truncate font-bold text-white text-sm group-hover:text-lime-400 transition cursor-pointer">
+                                  {primaryItem.name}
+                                </h4>
+                              </Link>
                               <p className="text-slate-400 text-xs">
                                 Phân loại: Size {primaryItem.selectedSize ?? '41'} ·{' '}
                                 {primaryItem.selectedColor ?? 'Mặc định'} · x{primaryItem.quantity}
@@ -557,7 +602,7 @@ export function Orders() {
                       <div className="mt-6 grid grid-cols-4 gap-2 text-center text-xs">
                         {[
                           { step: 1, title: 'Đã đặt hàng', icon: ShoppingBag },
-                          { step: 2, title: 'Đang xử lý', icon: Clock },
+                          { step: 2, title: 'Chờ lấy hàng', icon: Clock },
                           { step: 3, title: 'Đang giao', icon: Truck },
                           { step: 4, title: 'Đã nhận', icon: CheckCircle2 },
                         ].map((s) => {
@@ -598,6 +643,66 @@ export function Orders() {
                       </div>
                     )}
                   </div>
+
+                  {/* GHN Dedicated Tracking Card in Modal */}
+                  {(selectedOrder.ghn_code || selectedOrder.ghnTrackingCode) && (
+                    <div className="rounded-2xl border border-sky-500/30 bg-gradient-to-r from-sky-950/40 via-slate-900 to-slate-950 p-4 space-y-3">
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div className="flex items-center gap-3">
+                          <div className="grid h-10 w-10 place-items-center rounded-2xl bg-sky-500/20 text-sky-400 border border-sky-500/30">
+                            <Truck size={20} />
+                          </div>
+                          <div>
+                            <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-sky-400">
+                              ĐỐI TÁC VẬN CHUYỂN GHN EXPRESS
+                            </span>
+                            <div className="flex items-center gap-2">
+                              <span className="font-mono text-base font-black text-white">
+                                {selectedOrder.ghn_code || selectedOrder.ghnTrackingCode}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const code = selectedOrder.ghn_code || selectedOrder.ghnTrackingCode || ''
+                                  navigator.clipboard.writeText(code)
+                                  toast.success(`Đã sao chép mã vận đơn GHN: ${code}`)
+                                }}
+                                className="rounded-lg p-1 text-slate-400 hover:bg-white/10 hover:text-sky-300 transition cursor-pointer"
+                                title="Sao chép mã vận đơn"
+                              >
+                                <Copy size={14} />
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+
+                        <a
+                          href={`https://donhang.ghn.vn/?order_code=${selectedOrder.ghn_code || selectedOrder.ghnTrackingCode}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1.5 rounded-xl bg-sky-400 px-4 py-2 text-xs font-bold text-slate-950 hover:bg-sky-300 transition shadow-md shadow-sky-400/20"
+                        >
+                          Tra cứu hành trình trên GHN <ExternalLink size={14} />
+                        </a>
+                      </div>
+
+                      <div className="rounded-xl bg-slate-950/80 border border-white/5 p-3 text-xs text-slate-300 flex items-start gap-2.5">
+                        <span className="text-sky-400 text-base leading-none">●</span>
+                        <div>
+                          <b className="text-white">Trạng thái vận chuyển: </b>
+                          {selectedOrder.status === 'processing'
+                            ? 'Shop đã chuẩn bị xong đơn hàng — Chờ lấy hàng (Bưu tá GHN đang đến nhận bưu kiện).'
+                            : selectedOrder.status === 'shipping'
+                            ? 'Bưu tá GHN đang vận chuyển kiện hàng đến địa chỉ nhận của bạn.'
+                            : selectedOrder.status === 'delivered' || selectedOrder.status === 'paid'
+                            ? 'Kiện hàng đã được giao thành công tới tay bạn.'
+                            : selectedOrder.status === 'cancelled'
+                            ? 'Đơn giao hàng đã bị hủy.'
+                            : 'Đơn hàng đang được cập nhật từ hệ thống GHN.'}
+                        </div>
+                      </div>
+                    </div>
+                  )}
 
                   {/* Customer & Shipping Info */}
                   <div className="grid sm:grid-cols-2 gap-4 text-xs">
@@ -679,17 +784,21 @@ export function Orders() {
                             className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/[0.02] p-3 text-xs"
                           >
                             <div className="flex items-center gap-3 min-w-0">
-                              <img
-                                src={formatImgUrl(item.image)}
-                                alt=""
-                                className="h-12 w-12 rounded-xl object-cover border border-white/10 bg-slate-900 shrink-0"
-                                onError={(e) => {
-                                  (e.currentTarget as HTMLImageElement).src =
-                                    'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=300&q=80'
-                                }}
-                              />
+                              <Link to={`/product/${item.id}`} className="block shrink-0">
+                                <img
+                                  src={formatImgUrl(item.image)}
+                                  alt=""
+                                  className="h-12 w-12 rounded-xl object-cover border border-white/10 bg-slate-900 shrink-0 hover:border-lime-400/50 transition cursor-pointer"
+                                  onError={(e) => {
+                                    (e.currentTarget as HTMLImageElement).src =
+                                      'https://images.unsplash.com/photo-1511886929837-354d827aae26?auto=format&fit=crop&w=300&q=80'
+                                  }}
+                                />
+                              </Link>
                               <div className="min-w-0">
-                                <h4 className="font-bold text-white truncate">{item.name}</h4>
+                                <Link to={`/product/${item.id}`} className="block group">
+                                  <h4 className="font-bold text-white truncate group-hover:text-lime-400 transition cursor-pointer">{item.name}</h4>
+                                </Link>
                                 <p className="text-slate-400">
                                   Size: {item.selectedSize ?? '41'} ·{' '}
                                   {item.selectedColor ?? 'Mặc định'} · x{item.quantity}

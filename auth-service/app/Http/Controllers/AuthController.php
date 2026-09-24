@@ -258,10 +258,6 @@ class AuthController extends Controller
     public function updateProfile(Request $request): JsonResponse
     {
         $user = auth('api')->user();
-        if (!$user && $request->filled('user_id')) {
-            $user = User::find($request->input('user_id'));
-        }
-
         if (!$user) {
             abort(401, 'Vui lòng đăng nhập để cập nhật hồ sơ.');
         }

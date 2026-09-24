@@ -37,7 +37,20 @@ export function Home() {
 
       const pList = Array.isArray(prodsRes) ? prodsRes : (prodsRes?.data ?? [])
       if (pList.length > 0) {
-        setHomeProducts(pList.filter((p: Product) => p.isActive !== false && p.status !== 'inactive'))
+        setHomeProducts(
+          pList
+            .filter((p: any) => p.isActive !== false && p.status !== 'inactive' && p.is_active !== false)
+            .map((item: any) => ({
+              ...item,
+              id: Number(item.id),
+              category: typeof item.category === 'object' && item.category !== null ? item.category.name : (item.category ?? 'Khác'),
+              brand: typeof item.brand === 'object' && item.brand !== null ? item.brand.name : (item.brand ?? 'STRIKER'),
+              image: item.image || item.image_url || (Array.isArray(item.images) && item.images.length > 0 ? item.images[0] : '') || '',
+              images: Array.isArray(item.images) && item.images.length > 0 ? item.images : ((item.image || item.image_url) ? [item.image || item.image_url] : []),
+              colors: Array.isArray(item.colors) && item.colors.length > 0 ? item.colors : ['Standard'],
+              sizes: Array.isArray(item.sizes) && item.sizes.length > 0 ? item.sizes : ['Standard'],
+            }))
+        )
       }
     })
 

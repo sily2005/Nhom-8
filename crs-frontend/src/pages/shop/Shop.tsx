@@ -92,10 +92,13 @@ export function Shop() {
         setCatalog(
           pList.map((item: any) => ({
             ...item,
-            category: item.category?.name ?? item.category ?? 'Khác',
-            image: item.image_url ?? item.image ?? '',
-            colors: item.colors ?? ['Black'],
-            sizes: item.sizes ?? ['40', '41'],
+            id: Number(item.id),
+            category: typeof item.category === 'object' && item.category !== null ? item.category.name : (item.category ?? 'Khác'),
+            brand: typeof item.brand === 'object' && item.brand !== null ? item.brand.name : (item.brand ?? 'STRIKER'),
+            image: item.image || item.image_url || (Array.isArray(item.images) && item.images.length > 0 ? item.images[0] : '') || '',
+            images: Array.isArray(item.images) && item.images.length > 0 ? item.images : ((item.image || item.image_url) ? [item.image || item.image_url] : []),
+            colors: Array.isArray(item.colors) && item.colors.length > 0 ? item.colors : ['Black'],
+            sizes: Array.isArray(item.sizes) && item.sizes.length > 0 ? item.sizes : ['40', '41'],
             description: item.description ?? 'Thiết bị bóng đá chính hãng.',
           }))
         )

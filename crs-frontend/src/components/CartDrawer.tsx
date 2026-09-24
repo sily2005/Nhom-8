@@ -6,6 +6,18 @@ import { useApp } from '../context/AppContext'
 import { CouponModal } from './CouponModal'
 
 
+const getCartItemImageUrl = (item: any) => {
+  const raw =
+    item.image ||
+    item.image_url ||
+    (Array.isArray(item.images) && item.images.length > 0 ? item.images[0] : '') ||
+    ''
+  if (!raw) return 'https://images.unsplash.com/photo-1511886929837-354d827aae26?auto=format&fit=crop&w=300&q=80'
+  if (raw.startsWith('http') || raw.startsWith('data:')) return raw
+  if (raw.startsWith('/storage/')) return `http://localhost:8000${raw}`
+  return `http://localhost:8000/storage/${raw}`
+}
+
 //Ngăn kéo giỏ hàng trượt ra từ cạnh màn hình.
 export function CartDrawer() {
   const {
@@ -57,7 +69,7 @@ export function CartDrawer() {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               onClick={() => setCartDrawerOpen(false)}
-              className="fixed inset-0 z-50 bg-[#0B0E17]/80 backdrop-blur-sm"
+              className="fixed inset-0 z-[60] bg-[#0B0E17]/80 backdrop-blur-sm"
             />
 
             {/* Slide-out Drawer */}
@@ -66,8 +78,9 @@ export function CartDrawer() {
               animate={{ x: 0 }}
               exit={{ x: '100%' }}
               transition={{ type: 'spring', damping: 28, stiffness: 260 }}
-              className="fixed right-0 top-0 z-50 flex h-full w-full max-w-md flex-col border-l border-white/10 bg-[#131823] p-6 text-white shadow-2xl"
+              className="fixed right-0 top-0 z-[60] flex h-full w-full max-w-md flex-col border-l border-white/10 bg-[#131823] p-6 text-white shadow-2xl"
             >
+
               {/* Header */}
               <div className="flex items-center justify-between border-b border-white/10 pb-5">
                 <div className="flex items-center gap-2.5">
@@ -149,30 +162,38 @@ export function CartDrawer() {
                         />
 
                         {/* Image */}
-                        <img
-                          src={
-                            item.image?.startsWith('http') || item.image?.startsWith('data:')
-                              ? item.image
-                              : item.image?.startsWith('/storage/')
-                              ? `http://localhost:8000${item.image}`
-                              : `http://localhost:8000/storage/${item.image || ''}`
-                          }
-                          alt={item.name}
-                          className="h-20 w-20 rounded-xl object-cover border border-white/10 bg-[#0B0E17]"
-                          onError={(e) => {
-                            (e.currentTarget as HTMLImageElement).src =
-                              'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=300&q=80'
-                          }}
-                        />
+                        <Link
+                          to={`/product/${item.id}`}
+                          onClick={() => setCartDrawerOpen(false)}
+                          className="relative flex-shrink-0 group overflow-hidden rounded-xl"
+                          title={`Xem chi tiết ${item.name}`}
+                        >
+                          <img
+                            src={getCartItemImageUrl(item)}
+                            alt={item.name}
+                            className="h-20 w-20 rounded-xl object-cover border border-white/10 bg-[#0B0E17] group-hover:scale-105 group-hover:border-lime-400/50 transition duration-200 cursor-pointer"
+                            onError={(e) => {
+                              (e.currentTarget as HTMLImageElement).src =
+                                'https://images.unsplash.com/photo-1511886929837-354d827aae26?auto=format&fit=crop&w=300&q=80'
+                            }}
+                          />
+                        </Link>
 
                         {/* Info */}
                         <div className="min-w-0 flex-1 space-y-1.5">
                           <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-400">
-                            {item.brand}
+                            {typeof item.brand === 'object' && item.brand !== null ? (item.brand as any).name : (item.brand || 'STRIKER')}
                           </p>
-                          <h3 className="truncate text-xs font-bold text-white">
-                            {item.name}
-                          </h3>
+                          <Link
+                            to={`/product/${item.id}`}
+                            onClick={() => setCartDrawerOpen(false)}
+                            className="block group"
+                            title={`Xem chi tiết ${item.name}`}
+                          >
+                            <h3 className="truncate text-xs font-bold text-white group-hover:text-lime-400 transition cursor-pointer">
+                              {item.name}
+                            </h3>
+                          </Link>
 
                           {/* Variants */}
                           <div className="flex gap-2">
@@ -298,7 +319,7 @@ export function CartDrawer() {
                   {/* Lines Breakdown */}
                   <div className="space-y-1.5 text-xs">
                     <div className="flex justify-between text-slate-400">
-                      <span>Tạm tính tiền hàng</span>
+                      <span>Tiền hàng</span>
                       <span className="font-mono text-white">
                         {cartSubtotal.toLocaleString('vi-VN')}đ
                       </span>
@@ -313,28 +334,12 @@ export function CartDrawer() {
                       </div>
                     )}
 
-                    <div className="flex justify-between items-center text-slate-400">
-                      <span>Phí giao hàng</span>
-                      <span className="font-mono">
-                        {appliedCoupon?.discountType === 'freeship' ? (
-                          <b className="text-lime-300">Miễn phí (Freeship)</b>
-                        ) : (
-                          <span className="text-[11px] font-medium text-amber-300/90 bg-amber-400/10 px-2 py-0.5 rounded-md border border-amber-400/20">
-                            Tính tại thanh toán
-                          </span>
-                        )}
-                      </span>
-                    </div>
-
                     <div className="flex justify-between border-t border-white/10 pt-2 text-sm">
-                      <span className="font-bold text-white">Tổng tạm tính</span>
+                      <span className="font-bold text-white">Tổng tiền</span>
                       <b className="font-mono text-base font-black text-lime-300">
                         {cartTotal.toLocaleString('vi-VN')}đ
                       </b>
                     </div>
-                    <p className="text-[10px] text-slate-500 leading-tight">
-                      * Cước vận chuyển chuẩn GHN sẽ được tính theo địa chỉ nhận hàng tại bước thanh toán.
-                    </p>
                   </div>
 
                   {/* Actions */}

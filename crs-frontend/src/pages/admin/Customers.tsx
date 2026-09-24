@@ -13,8 +13,10 @@ import {
   CheckCircle2,
   Truck,
   XCircle,
-  Package
+  Package,
+  MessageSquare
 } from 'lucide-react';
+
 import { toast } from 'sonner';
 import { fetchUsers, toggleUserStatus } from '../../services/auth';
 import { fetchAdminOrders, mapBackendOrder } from '../../services/orders';
@@ -302,9 +304,20 @@ export const Customers: React.FC = () => {
                       </span>
                     </td>
 
-                    {/* Cột 5: TRẠNG THÁI (Badge Clickable + Nút Xem hồ sơ) */}
+                    {/* Cột 5: TRẠNG THÁI (Badge Clickable + Nút Nhắn tin + Nút Xem hồ sơ) */}
                     <td className="py-4 px-6 text-right">
                       <div className="inline-flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            window.dispatchEvent(new CustomEvent('open-admin-chat', { detail: { userId: customer.id } }));
+                          }}
+                          className="p-1.5 rounded-xl bg-zinc-800/80 hover:bg-lime-400 hover:text-zinc-950 text-lime-400 text-xs font-bold transition"
+                          title="Nhắn tin với khách hàng"
+                        >
+                          <MessageSquare className="w-3.5 h-3.5" />
+                        </button>
+
                         <button
                           type="button"
                           onClick={() => handleToggleStatus(customer.id)}
@@ -333,6 +346,7 @@ export const Customers: React.FC = () => {
                         </button>
                       </div>
                     </td>
+
                   </tr>
                 );
               })}
@@ -492,12 +506,26 @@ export const Customers: React.FC = () => {
             <div className="flex justify-end pt-5 mt-6 border-t border-zinc-800 gap-3">
               <button
                 type="button"
+                onClick={() => {
+                  const id = selectedCustomer.id;
+                  setSelectedCustomer(null);
+                  window.dispatchEvent(new CustomEvent('open-admin-chat', { detail: { userId: id } }));
+                }}
+                className="px-4 py-2.5 rounded-xl bg-lime-400 hover:bg-lime-300 text-zinc-950 font-bold text-xs flex items-center gap-2 shadow-lg shadow-lime-400/20 transition"
+              >
+                <MessageSquare className="w-4 h-4" />
+                <span>Nhắn tin trao đổi với khách</span>
+              </button>
+
+              <button
+                type="button"
                 onClick={() => setSelectedCustomer(null)}
                 className="px-5 py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-xs font-bold text-white transition"
               >
                 Đóng
               </button>
             </div>
+
           </div>
         </div>
       )}

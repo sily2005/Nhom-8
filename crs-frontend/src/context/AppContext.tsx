@@ -5,6 +5,7 @@ import { addCartItem, fetchOrders, mapBackendOrder, cancelOrder as apiCancelOrde
 import {
   fetchAddresses,
   createAddress as apiCreateAddress,
+  updateAddress as apiUpdateAddress,
   deleteAddress as apiDeleteAddress,
   setDefaultAddress as apiSetDefaultAddress,
   mapDbAddress,
@@ -32,13 +33,21 @@ const parseCartFromStorage = (key: string): CartItem[] => {
   if (!stored) return []
   try {
     const items = JSON.parse(stored) as Partial<CartItem>[]
-    return items.map((item) => ({
-      ...item,
-      cartItemId:
-        item.cartItemId ??
-        `${item.id}_${item.selectedSize ?? 'default'}_${item.selectedColor ?? 'default'}`,
-      selected: item.selected !== false,
-    })) as CartItem[]
+    return items.map((item) => {
+      const resolvedImg =
+        item.image ||
+        (item as any).image_url ||
+        (Array.isArray((item as any).images) && (item as any).images.length > 0 ? (item as any).images[0] : '') ||
+        ''
+      return {
+        ...item,
+        image: resolvedImg,
+        cartItemId:
+          item.cartItemId ??
+          `${item.id}_${item.selectedSize ?? 'default'}_${item.selectedColor ?? 'default'}`,
+        selected: item.selected !== false,
+      }
+    }) as CartItem[]
   } catch {
     return []
   }
@@ -71,6 +80,7 @@ type AppContextValue = {
   logout: () => void
   updateUserProfile: (data: Partial<User>) => void
   addAddress: (address: Omit<Address, 'id'>) => Promise<Address | null>
+  updateAddress: (id: string, address: Partial<Address>) => Promise<Address | null>
   deleteAddress: (id: string) => Promise<void>
   setDefaultAddress: (id: string) => Promise<void>
   addToCart: (product: Product, quantity?: number, options?: { size?: string; color?: string }) => void
@@ -114,10 +124,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     try {
       const parsed = JSON.parse(stored) as User & { phone_number?: string }
       if (!parsed.role) {
-        parsed.role =
-          parsed.email === 'admin@gmail.com' || (parsed as any).phone === '0988888888'
-            ? 'admin'
-            : 'user'
+        parsed.role = 'user'
       }
       if (parsed.addresses && parsed.addresses.length > 0) {
         parsed.addresses = parsed.addresses.map((a: any) =>
@@ -237,13 +244,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }
 
   const login = (nextUser: User & { phone_number?: string; addresses?: any[] }, token = 'demo-token') => {
-    const role: Role =
-      nextUser.role === 'admin' ||
-        nextUser.email === 'admin@gmail.com' ||
-        nextUser.phone === '0988888888' ||
-        nextUser.phone_number === '0988888888'
-        ? 'admin'
-        : nextUser.role || 'user'
+    const role: Role = nextUser.role === 'admin' ? 'admin' : (nextUser.role || 'user')
 
     const normalizedAddresses: Address[] = (nextUser.addresses ?? []).map((a: any) =>
       a.recipient_name ? mapDbAddress(a) : (a as Address)
@@ -312,6 +313,34 @@ export function AppProvider({ children }: { children: ReactNode }) {
       return created
     } catch (e) {
       toast.error('Không thể thêm địa chỉ. Vui lòng thử lại.')
+      throw e
+    }
+  }
+
+  const updateAddress = async (id: string, addrData: Partial<Address>): Promise<Address | null> => {
+    if (!user?.id) return null
+    try {
+      const updated = await apiUpdateAddress(id, addrData)
+      setUser((prev) => {
+        if (!prev) return null
+        const addresses = (prev.addresses ?? [])
+        const nextAddresses = addresses.map((a) => {
+          if (String(a.id) === String(id)) {
+            return { ...a, ...updated }
+          }
+          if (updated.isDefault) {
+            return { ...a, isDefault: false }
+          }
+          return a
+        })
+        const nextUser = { ...prev, addresses: nextAddresses }
+        localStorage.setItem('crs_user', JSON.stringify(nextUser))
+        return nextUser
+      })
+      toast.success('Đã cập nhật địa chỉ thành công!')
+      return updated
+    } catch (e) {
+      toast.error('Không thể cập nhật địa chỉ. Vui lòng thử lại.')
       throw e
     }
   }
@@ -390,12 +419,23 @@ export function AppProvider({ children }: { children: ReactNode }) {
       return
     }
 
+    const chosenImage =
+      product.image ||
+      (product as any).image_url ||
+      (Array.isArray(product.images) && product.images.length > 0 ? product.images[0] : '') ||
+      ''
+
     setCart((current) => {
       const existingInCurrent = current.find((item) => item.cartItemId === cartItemId)
       if (existingInCurrent) {
         return current.map((item) =>
           item.cartItemId === cartItemId
-            ? { ...item, quantity: item.quantity + quantity, selected: true }
+            ? {
+                ...item,
+                image: item.image || chosenImage,
+                quantity: item.quantity + quantity,
+                selected: true,
+              }
             : item
         )
       }
@@ -403,6 +443,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         ...current,
         {
           ...product,
+          image: chosenImage,
           cartItemId,
           quantity,
           selectedSize: chosenSize,
@@ -658,6 +699,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     logout,
     updateUserProfile,
     addAddress,
+    updateAddress,
     deleteAddress,
     setDefaultAddress,
     addToCart,

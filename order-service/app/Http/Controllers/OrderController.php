@@ -32,18 +32,31 @@ class OrderController extends Controller
      */
     public function store(Request $request): JsonResponse
     {
-        $validated = $request->validate([
+        $data = $request->all();
+        $phoneInput = $data['phone'] ?? $data['shipping_phone'] ?? null;
+        $nameInput = $data['name'] ?? $data['shipping_name'] ?? $data['full_name'] ?? null;
+        $addressInput = $data['address'] ?? $data['shipping_address'] ?? null;
+
+        $data['phone'] = $phoneInput;
+        $data['shipping_phone'] = $phoneInput;
+        $data['name'] = $nameInput;
+        $data['shipping_name'] = $nameInput;
+        $data['address'] = $addressInput;
+        $data['shipping_address'] = $addressInput;
+
+        $validator = \Illuminate\Support\Facades\Validator::make($data, [
             'user_id' => ['sometimes', 'nullable', 'integer', 'min:1'],
             'name' => ['sometimes', 'nullable', 'string', 'max:100'],
             'shipping_name' => ['sometimes', 'nullable', 'string', 'max:100'],
             'phone' => ['required', 'string', 'regex:/^(0|\+84)[0-9]{8,11}$/'],
+            'shipping_phone' => ['sometimes', 'nullable', 'string'],
             'address' => ['sometimes', 'nullable', 'string'],
             'shipping_address' => ['sometimes', 'nullable', 'string'],
             'to_district_id' => ['sometimes', 'nullable'],
             'to_ward_code' => ['sometimes', 'nullable'],
             'shipping_fee' => ['sometimes', 'numeric', 'min:0'],
             'discount_amount' => ['sometimes', 'numeric', 'min:0'],
-            'payment_method' => ['sometimes', 'string', 'in:cod,momo,bank_transfer'],
+            'payment_method' => ['sometimes', 'string', 'in:cod,momo'],
             'coupon_id' => ['sometimes', 'nullable', 'integer', 'exists:coupons,id'],
             'coupon_code' => ['sometimes', 'nullable', 'string'],
             'note' => ['sometimes', 'nullable', 'string'],
@@ -58,7 +71,11 @@ class OrderController extends Controller
             'items.*.color' => ['sometimes', 'nullable', 'string'],
             'items.*.selectedColor' => ['sometimes', 'nullable', 'string'],
             'items.*.sku' => ['sometimes', 'nullable', 'string'],
+            'items.*.image' => ['sometimes', 'nullable', 'string'],
+            'items.*.product_image' => ['sometimes', 'nullable', 'string'],
         ]);
+
+        $validated = $validator->validate();
 
         try {
             $orderData = DB::transaction(function () use ($validated, $request): array {
@@ -100,7 +117,7 @@ class OrderController extends Controller
 
                 // 1. Validate and Apply Coupon strictly if provided
                 if (!empty($validated['coupon_code']) || !empty($couponId)) {
-                    $couponQuery = Coupon::query()->where('is_deleted', false)->where('is_active', true)->lockForUpdate();
+                    $couponQuery = Coupon::query()->where('is_active', true)->lockForUpdate();
                     if (!empty($couponId)) {
                         $coupon = $couponQuery->where('id', $couponId)->first();
                     } else {
@@ -129,6 +146,11 @@ class OrderController extends Controller
                     // Calculate discount
                     if ($coupon->type === 'fixed') {
                         $discountAmount = min($subtotal, (float) $coupon->value);
+                    } elseif ($coupon->type === 'percent') {
+                        $rawDiscount = ($subtotal * (float) $coupon->value) / 100;
+                        $discountAmount = ($coupon->max_discount_amount && (float) $coupon->max_discount_amount > 0)
+                            ? min($rawDiscount, (float) $coupon->max_discount_amount)
+                            : $rawDiscount;
                     } elseif ($coupon->type === 'freeship') {
                         $freeshipDiscount = min($shippingFee, (float) ($coupon->value > 0 ? $coupon->value : $shippingFee));
                         $discountAmount = $freeshipDiscount;
@@ -141,29 +163,7 @@ class OrderController extends Controller
 
                 $totalAmount = max(0, $subtotal + $shippingFee - ($coupon && $coupon->type === 'freeship' ? 0 : $discountAmount));
 
-                // 2. Call catalog-service to deduct stock in real time
-                $catalogUrl = rtrim((string) config('services.catalog.base_url', 'http://127.0.0.1:8002'), '/');
-                $deductPayload = [
-                    'items' => collect($orderItemsData)->map(fn ($item) => [
-                        'product_id' => (int) $item['product_id'],
-                        'quantity' => (int) $item['quantity'],
-                    ])->values()->all(),
-                ];
-
-                try {
-                    $catalogResponse = Http::timeout(3)->post("{$catalogUrl}/api/products/deduct-stock", $deductPayload);
-                    if (!$catalogResponse->successful()) {
-                        $errBody = $catalogResponse->json();
-                        $errMsg = $errBody['message'] ?? $errBody['error']['message'] ?? null;
-                        if ($errMsg) {
-                            Log::warning('Catalog stock deduction warning: ' . $errMsg);
-                        }
-                    }
-                } catch (Exception $e) {
-                    Log::warning('Cannot connect to Catalog Service to deduct stock: ' . $e->getMessage());
-                }
-
-                // 3. Create Order Record
+                // 2. Create Order Record
                 $orderNumber = 'ORD-' . now()->format('Ymd') . '-' . Str::upper(Str::random(6));
                 $shippingName = $validated['name'] ?? $validated['shipping_name'] ?? 'Khách hàng';
                 $shippingAddress = $validated['shipping_address'] ?? $validated['address'] ?? '';
@@ -189,34 +189,22 @@ class OrderController extends Controller
                     'note' => $validated['note'] ?? null,
                 ]);
 
-                // 4. Save Snapshots into Order Items
+                // 3. Save Snapshots into Order Items
                 foreach ($orderItemsData as $item) {
                     $pid = (int) $item['product_id'];
-                    $name = $item['product_name'] ?? $item['name'] ?? null;
-                    if (empty($name)) {
-                        $name = 'Product #' . $pid;
-
-                        try {
-                            $prodRes = Http::timeout(2)->get("{$catalogUrl}/api/products/{$pid}");
-                            if ($prodRes->successful()) {
-                                $pData = $prodRes->json();
-                                $name = $pData['data']['name'] ?? $pData['name'] ?? ('Product #' . $pid);
-                            }
-                        } catch (Exception) {
-                            $name = 'Product #' . $pid;
-                        }
-                    }
-
+                    $name = $item['product_name'] ?? $item['name'] ?? ('Product #' . $pid);
                     $price = (float) $item['price'];
                     $qty = (int) $item['quantity'];
                     $size = $item['size'] ?? $item['selectedSize'] ?? null;
                     $color = $item['color'] ?? $item['selectedColor'] ?? null;
                     $sku = $item['sku'] ?? ('STR-' . $pid . ($size ? '-' . $size : '') . ($color ? '-' . Str::upper($color) : ''));
+                    $image = $item['image'] ?? $item['product_image'] ?? null;
 
                     $order->items()->create([
                         'product_id' => $pid,
                         'variant_id' => $pid,
                         'product_name' => $name,
+                        'image' => $image,
                         'variant_attributes' => [
                             'size' => $size,
                             'color' => $color,
@@ -228,13 +216,13 @@ class OrderController extends Controller
                     ]);
                 }
 
-                // 5. Clean up user's cart
+                // 4. Clean up user's cart
                 if ($cart) {
                     $cart->items()->delete();
                 }
 
-                // 6. Record PaymentTransaction & Generate MoMo Pay URL if momo
-                $payUrl = null;
+                // 5. Record initial PaymentTransaction
+                $transaction = null;
                 if ($order->payment_method === 'momo') {
                     $transaction = PaymentTransaction::create([
                         'order_id' => $order->id,
@@ -242,16 +230,8 @@ class OrderController extends Controller
                         'amount' => $order->total_amount,
                         'status' => 'pending',
                     ]);
-
-                    try {
-                        $momoService = app(\App\Services\MomoService::class);
-                        $momoRes = $momoService->createPayment($order, $transaction);
-                        $payUrl = $momoRes['payUrl'] ?? null;
-                    } catch (\Exception $ex) {
-                        Log::warning('MoMo create payment warning in store: ' . $ex->getMessage());
-                    }
                 } elseif ($order->payment_method === 'cod') {
-                    PaymentTransaction::create([
+                    $transaction = PaymentTransaction::create([
                         'order_id' => $order->id,
                         'gateway' => 'cod',
                         'amount' => $order->total_amount,
@@ -261,16 +241,55 @@ class OrderController extends Controller
                 }
 
                 return [
-                    'order' => $order->load(['items', 'coupon', 'paymentTransactions']),
-                    'pay_url' => $payUrl,
+                    'order' => $order,
+                    'transaction' => $transaction,
+                    'items' => $orderItemsData,
                 ];
             });
+
+            $order = $orderData['order'];
+            $transaction = $orderData['transaction'];
+            $orderedItems = $orderData['items'] ?? [];
+
+            // 6. External Call: Deduct stock from Catalog Service (Outside Transaction)
+            $catalogUrl = rtrim((string) config('services.catalog.base_url', 'http://127.0.0.1:8002'), '/');
+            $deductPayload = [
+                'items' => collect($orderedItems)->map(fn ($item) => [
+                    'product_id' => (int) $item['product_id'],
+                    'quantity' => (int) $item['quantity'],
+                ])->values()->all(),
+            ];
+
+            try {
+                $catalogResponse = Http::timeout(3)->post("{$catalogUrl}/api/products/deduct-stock", $deductPayload);
+                if (!$catalogResponse->successful()) {
+                    $errBody = $catalogResponse->json();
+                    $errMsg = $errBody['message'] ?? $errBody['error']['message'] ?? null;
+                    if ($errMsg) {
+                        Log::warning('Catalog stock deduction warning: ' . $errMsg);
+                    }
+                }
+            } catch (Exception $e) {
+                Log::warning('Cannot connect to Catalog Service to deduct stock: ' . $e->getMessage());
+            }
+
+            // 7. External Call: Generate MoMo Payment URL (Outside Transaction)
+            $payUrl = null;
+            if ($order->payment_method === 'momo' && $transaction) {
+                try {
+                    $momoService = app(\App\Services\MomoService::class);
+                    $momoRes = $momoService->createPayment($order, $transaction);
+                    $payUrl = $momoRes['payUrl'] ?? null;
+                } catch (\Exception $ex) {
+                    Log::warning('MoMo create payment warning in store: ' . $ex->getMessage());
+                }
+            }
 
             return response()->json([
                 'success' => true,
                 'message' => 'Đặt hàng thành công.',
-                'data' => $orderData['order'],
-                'pay_url' => $orderData['pay_url'],
+                'data' => $order->load(['items', 'coupon', 'paymentTransactions']),
+                'pay_url' => $payUrl,
                 'errors' => null,
             ], 201);
         } catch (Exception $e) {
@@ -325,8 +344,11 @@ class OrderController extends Controller
             ->withQueryString();
 
         $pendingCount = Order::where(function ($q) {
-            $q->whereIn('order_status', ['pending', 'processing'])
-              ->orWhereIn('status', ['pending', 'processing']);
+            $q->where('order_status', 'pending')->orWhere('status', 'pending');
+        })->count();
+
+        $processingCount = Order::where(function ($q) {
+            $q->where('order_status', 'processing')->orWhere('status', 'processing');
         })->count();
 
         $revenue = Order::where(function ($q) {
@@ -342,9 +364,16 @@ class OrderController extends Controller
             'total' => Order::count(),
             'revenue' => (float) $revenue,
             'pending' => $pendingCount,
-            'shipping' => Order::where('order_status', 'shipping')->orWhere('status', 'shipping')->count(),
-            'delivered' => Order::whereIn('order_status', ['delivered', 'paid'])->orWhereIn('status', ['delivered', 'paid'])->count(),
-            'cancelled' => Order::where('order_status', 'cancelled')->orWhere('status', 'cancelled')->count(),
+            'processing' => $processingCount,
+            'shipping' => Order::where(function ($q) {
+                $q->where('order_status', 'shipping')->orWhere('status', 'shipping');
+            })->count(),
+            'delivered' => Order::where(function ($q) {
+                $q->whereIn('order_status', ['delivered', 'paid'])->orWhereIn('status', ['delivered', 'paid']);
+            })->count(),
+            'cancelled' => Order::where(function ($q) {
+                $q->where('order_status', 'cancelled')->orWhere('status', 'cancelled');
+            })->count(),
         ];
 
         return response()->json([
@@ -368,8 +397,11 @@ class OrderController extends Controller
     public function stats(): JsonResponse
     {
         $pendingCount = Order::where(function ($q) {
-            $q->whereIn('order_status', ['pending', 'processing'])
-              ->orWhereIn('status', ['pending', 'processing']);
+            $q->where('order_status', 'pending')->orWhere('status', 'pending');
+        })->count();
+
+        $processingCount = Order::where(function ($q) {
+            $q->where('order_status', 'processing')->orWhere('status', 'processing');
         })->count();
 
         $revenue = Order::where(function ($q) {
@@ -387,9 +419,16 @@ class OrderController extends Controller
                 'total' => Order::count(),
                 'revenue' => (float) $revenue,
                 'pending' => $pendingCount,
-                'shipping' => Order::where('order_status', 'shipping')->orWhere('status', 'shipping')->count(),
-                'delivered' => Order::whereIn('order_status', ['delivered', 'paid'])->orWhereIn('status', ['delivered', 'paid'])->count(),
-                'cancelled' => Order::where('order_status', 'cancelled')->orWhere('status', 'cancelled')->count(),
+                'processing' => $processingCount,
+                'shipping' => Order::where(function ($q) {
+                    $q->where('order_status', 'shipping')->orWhere('status', 'shipping');
+                })->count(),
+                'delivered' => Order::where(function ($q) {
+                    $q->whereIn('order_status', ['delivered', 'paid'])->orWhereIn('status', ['delivered', 'paid']);
+                })->count(),
+                'cancelled' => Order::where(function ($q) {
+                    $q->where('order_status', 'cancelled')->orWhere('status', 'cancelled');
+                })->count(),
             ],
         ]);
     }
@@ -465,8 +504,8 @@ class OrderController extends Controller
 
             $order->update([
                 'ghn_code' => $ghnOrderCode,
-                'order_status' => 'shipping',
-                'status' => 'shipping',
+                'order_status' => 'processing',
+                'status' => 'processing',
             ]);
 
             return response()->json([

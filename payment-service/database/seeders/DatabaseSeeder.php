@@ -2,24 +2,26 @@
 
 namespace Database\Seeders;
 
-use App\Models\User;
-use Illuminate\Database\Console\Seeds\WithoutModelEvents;
+use App\Models\PaymentSetting;
 use Illuminate\Database\Seeder;
 
 class DatabaseSeeder extends Seeder
 {
-    use WithoutModelEvents;
-
     /**
      * Seed the application's database.
      */
     public function run(): void
     {
-        // User::factory(10)->create();
-
-        User::factory()->create([
-            'name' => 'Test User',
-            'email' => 'test@example.com',
-        ]);
+        PaymentSetting::updateOrCreate(
+            ['is_active' => true],
+            [
+                'bank_code' => 'MB',
+                'bank_name' => 'MBBank (Ngân hàng Quân Đội)',
+                'account_number' => '0977777777',
+                'account_name' => 'STRIKER SPORT PRO',
+                'syntax_prefix' => 'STR',
+                'template' => 'compact2',
+            ]
+        );
     }
 }
