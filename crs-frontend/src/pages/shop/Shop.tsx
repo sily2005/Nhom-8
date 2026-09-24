@@ -13,6 +13,7 @@ import { useSearchParams } from 'react-router-dom'
 import { ProductCard } from '../../components/ProductCard'
 import { ProductSkeleton } from '../../components/Skeleton'
 import { fetchProducts, fetchCategories, fetchBrands } from '../../services/catalog'
+import { fetchReviewSummaries } from '../../services/reviews'
 import type { Product } from '../../types'
 
 function matchCategoryFromQuery(value: string | null, dynamicCats: string[]): string {
@@ -76,8 +77,9 @@ export function Shop() {
     Promise.all([
       fetchCategories().catch(() => []),
       fetchBrands().catch(() => []),
-      fetchProducts({ per_page: 100 }).catch(() => [])
-    ]).then(([cats, brands, prods]) => {
+      fetchProducts({ per_page: 100 }).catch(() => []),
+      fetchReviewSummaries().catch(() => ({} as Record<number, any>)),
+    ]).then(([cats, brands, prods, revMapRes]) => {
       if (!active) return
 
       if (Array.isArray(cats) && cats.length > 0) {
@@ -87,23 +89,32 @@ export function Shop() {
         setShopBrands(['Tất cả thương hiệu', ...brands.map((b: any) => (typeof b === 'string' ? b : b.name))])
       }
 
+      const revMap = revMapRes || {}
       const pList: any[] = Array.isArray(prods) ? prods : (prods?.data ?? [])
       if (pList.length > 0) {
         setCatalog(
-          pList.map((item: any) => ({
-            ...item,
-            id: Number(item.id),
-            price: Number(item.price ?? 0),
-            oldPrice: item.oldPrice != null ? Number(item.oldPrice) : (item.old_price != null ? Number(item.old_price) : undefined),
-            tag: item.tag || undefined,
-            category: typeof item.category === 'object' && item.category !== null ? item.category.name : (item.category ?? 'Khác'),
-            brand: typeof item.brand === 'object' && item.brand !== null ? item.brand.name : (item.brand ?? 'STRIKER'),
-            image: item.image || item.image_url || (Array.isArray(item.images) && item.images.length > 0 ? item.images[0] : '') || '',
-            images: Array.isArray(item.images) && item.images.length > 0 ? item.images : ((item.image || item.image_url) ? [item.image || item.image_url] : []),
-            colors: Array.isArray(item.colors) && item.colors.length > 0 ? item.colors : ['Black'],
-            sizes: Array.isArray(item.sizes) && item.sizes.length > 0 ? item.sizes : ['40', '41'],
-            description: item.description ?? 'Thiết bị bóng đá chính hãng.',
-          }))
+          pList.map((item: any) => {
+            const rInfo = revMap[item.id] || revMap[Number(item.id)]
+            const dynamicRating = rInfo?.avg_rating ? Number(rInfo.avg_rating) : 5.0
+            const dynamicCount = rInfo?.review_count ? Number(rInfo.review_count) : 0
+
+            return {
+              ...item,
+              id: Number(item.id),
+              price: Number(item.price ?? 0),
+              oldPrice: item.oldPrice != null ? Number(item.oldPrice) : (item.old_price != null ? Number(item.old_price) : undefined),
+              tag: item.tag || undefined,
+              rating: dynamicRating,
+              reviewsCount: dynamicCount,
+              category: typeof item.category === 'object' && item.category !== null ? item.category.name : (item.category ?? 'Khác'),
+              brand: typeof item.brand === 'object' && item.brand !== null ? item.brand.name : (item.brand ?? 'STRIKER'),
+              image: item.image || item.image_url || (Array.isArray(item.images) && item.images.length > 0 ? item.images[0] : '') || '',
+              images: Array.isArray(item.images) && item.images.length > 0 ? item.images : ((item.image || item.image_url) ? [item.image || item.image_url] : []),
+              colors: Array.isArray(item.colors) && item.colors.length > 0 ? item.colors : ['Black'],
+              sizes: Array.isArray(item.sizes) && item.sizes.length > 0 ? item.sizes : ['40', '41'],
+              description: item.description ?? 'Thiết bị bóng đá chính hãng.',
+            }
+          })
         )
       }
       setLoading(false)

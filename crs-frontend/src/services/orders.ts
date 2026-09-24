@@ -47,9 +47,9 @@ export async function createOrder(payload: CreateOrderPayload) {
   }
 }
 
-export async function getMomoPayUrl(orderId: number | string): Promise<string | null> {
+export async function getMomoPayUrl(orderId: number | string, amount?: number): Promise<string | null> {
   try {
-    const response = await api.get(`/orders/${orderId}/start-momo`)
+    const response = await api.post('/payment/momo/start', { order_id: Number(orderId), amount: amount ?? 50000 })
     return response.data?.data?.pay_url ?? response.data?.pay_url ?? null
   } catch (error: any) {
     if (error?.response?.data?.errors) {

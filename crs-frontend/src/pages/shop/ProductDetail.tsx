@@ -436,10 +436,22 @@ export function ProductDetail() {
               <div className="flex items-center gap-4 text-xs">
                 <div className="flex items-center gap-1 text-amber-400">
                   {[...Array(5)].map((_, i) => (
-                    <Star key={i} size={14} className="fill-amber-400" />
+                    <Star
+                      key={i}
+                      size={14}
+                      className={
+                        reviews.length === 0
+                          ? 'fill-amber-400 text-amber-400'
+                          : i < Math.round(Number(averageRating))
+                          ? 'fill-amber-400 text-amber-400'
+                          : 'text-slate-600'
+                      }
+                    />
                   ))}
-                  <span className="ml-1 font-bold text-slate-200">4.9</span>
-                  <span className="text-slate-500">({reviews.length > 0 ? reviews.length : 128} đánh giá)</span>
+                  <span className="ml-1 font-bold text-slate-200">{averageRating}</span>
+                  <span className="text-slate-500">
+                    ({reviews.length > 0 ? `${reviews.length} đánh giá` : 'Chưa có đánh giá'})
+                  </span>
                 </div>
                 <span className="text-slate-600">|</span>
                 {isOutOfStock ? (

@@ -16,6 +16,8 @@ return new class extends Migration {
             $table->string('shipping_phone', 15);
             $table->string('phone', 30)->nullable();
             $table->text('shipping_address');
+            $table->unsignedInteger('to_district_id')->nullable();
+            $table->string('to_ward_code', 50)->nullable();
             $table->decimal('subtotal', 12, 2);
             $table->decimal('shipping_fee', 12, 2)->default(0.00);
             $table->decimal('discount_amount', 12, 2)->default(0.00);
@@ -39,6 +41,7 @@ return new class extends Migration {
             $table->unsignedBigInteger('product_id')->index(); 
             $table->unsignedBigInteger('variant_id')->index(); 
             $table->string('product_name');
+            $table->longText('image')->nullable();
             $table->json('variant_attributes');
             $table->string('sku', 100)->index();
             $table->decimal('unit_price', 12, 2);

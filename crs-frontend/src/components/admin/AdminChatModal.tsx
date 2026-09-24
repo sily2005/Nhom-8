@@ -89,7 +89,8 @@ export const AdminChatModal: React.FC<AdminChatModalProps> = ({
   const loadUsers = useCallback(async (isInitial = false) => {
     if (isInitial && usersRef.current.length === 0) setLoadingUsers(true);
     try {
-      const userList = await fetchAdminChatUsers();
+      const rawUserList = await fetchAdminChatUsers();
+      const userList = rawUserList.filter(u => u.role !== 'admin' && u.id !== Number(currentAdmin?.id || 1));
       setUsers(userList);
 
       // Nếu có initialUserId truyền từ prop
@@ -103,7 +104,7 @@ export const AdminChatModal: React.FC<AdminChatModalProps> = ({
         } else {
           // Khách hàng chưa từng nhắn -> lấy thông tin chi tiết của họ từ DB
           const detail = await fetchChatUserDetail(initialUserId);
-          if (detail) {
+          if (detail && detail.role !== 'admin') {
             if (selectedUserRef.current?.id !== detail.id) {
               setSelectedUser(detail);
               setUsers(prev => [detail, ...prev.filter(u => u.id !== detail.id)]);
@@ -111,8 +112,8 @@ export const AdminChatModal: React.FC<AdminChatModalProps> = ({
             }
           }
         }
-      } else if (!selectedUserRef.current && userList.length > 0) {
-        // Chưa chọn user nào -> mặc định chọn người đầu tiên
+      } else if ((!selectedUserRef.current || selectedUserRef.current.id === Number(currentAdmin?.id || 1)) && userList.length > 0) {
+        // Chưa chọn user nào hoặc bị trỏ vào admin -> mặc định chọn khách hàng đầu tiên
         const firstUser = userList[0];
         setSelectedUser(firstUser);
         void loadMessages(firstUser.id, true);
@@ -122,20 +123,20 @@ export const AdminChatModal: React.FC<AdminChatModalProps> = ({
     } finally {
       if (isInitial) setLoadingUsers(false);
     }
-  }, [initialUserId, loadMessages]);
+  }, [initialUserId, loadMessages, currentAdmin?.id]);
 
   // 3. Tìm kiếm trong toàn bộ khách hàng hệ thống
   const handleSearchAllCustomers = useCallback(async (query: string) => {
     setSearchingAll(true);
     try {
       const results = await searchAdminCustomers(query);
-      setSearchResults(results);
+      setSearchResults(results.filter(u => u.role !== 'admin' && u.id !== Number(currentAdmin?.id || 1)));
     } catch (err) {
       console.error('Lỗi tìm kiếm khách hàng:', err);
     } finally {
       setSearchingAll(false);
     }
-  }, []);
+  }, [currentAdmin?.id]);
 
   // Khi người dùng gõ tìm kiếm -> tìm kiếm toàn hệ thống nếu ở tab all_customers hoặc nếu không có trong hội thoại
   useEffect(() => {

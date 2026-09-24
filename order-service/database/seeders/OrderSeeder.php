@@ -4,7 +4,6 @@ namespace Database\Seeders;
 
 use App\Models\Order;
 use App\Models\OrderItem;
-use App\Models\PaymentTransaction;
 use Illuminate\Database\Seeder;
 
 class OrderSeeder extends Seeder
@@ -49,16 +48,6 @@ class OrderSeeder extends Seeder
             'variant_attributes' => ['size' => '41', 'color' => 'Volt'],
         ]);
 
-        PaymentTransaction::updateOrCreate(
-            ['order_id' => $order1->id],
-            [
-                'gateway' => 'momo',
-                'amount' => 4220000,
-                'status' => 'completed',
-                'message' => 'Thanh toán MoMo thành công',
-            ]
-        );
-
         // 2. Đơn hàng đang giao (shipping) - Trần Minh Hoàng
         $order2 = Order::updateOrCreate(
             ['order_code' => 'STR-260902-002'],
@@ -97,16 +86,6 @@ class OrderSeeder extends Seeder
             'variant_attributes' => ['size' => '42', 'color' => 'White'],
         ]);
 
-        PaymentTransaction::updateOrCreate(
-            ['order_id' => $order2->id],
-            [
-                'gateway' => 'cod',
-                'amount' => 3920000,
-                'status' => 'pending',
-                'message' => 'Thanh toán COD khi nhận hàng',
-            ]
-        );
-
         // 3. Đơn hàng chờ xử lý (pending) - Lê Quốc Bảo
         $order3 = Order::updateOrCreate(
             ['order_code' => 'STR-260903-003'],
@@ -143,16 +122,6 @@ class OrderSeeder extends Seeder
             'subtotal' => 1190000,
             'variant_attributes' => ['size' => 'L', 'color' => 'Green'],
         ]);
-
-        PaymentTransaction::updateOrCreate(
-            ['order_id' => $order3->id],
-            [
-                'gateway' => 'momo',
-                'amount' => 1220000,
-                'status' => 'completed',
-                'message' => 'Thanh toán MoMo thành công',
-            ]
-        );
 
         // 4. Đơn hàng đã giao thành công (delivered) - Phạm Thu Hương
         $order4 = Order::updateOrCreate(
@@ -191,15 +160,6 @@ class OrderSeeder extends Seeder
             'subtotal' => 3150000,
             'variant_attributes' => ['size' => '40', 'color' => 'Blue'],
         ]);
-
-        PaymentTransaction::updateOrCreate(
-            ['order_id' => $order4->id],
-            [
-                'gateway' => 'momo',
-                'amount' => 3150000,
-                'status' => 'completed',
-                'message' => 'Thanh toán MoMo thành công',
-            ]
-        );
     }
 }
+

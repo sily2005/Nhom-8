@@ -80,7 +80,9 @@ export function ProductCard({ product, className = '' }: ProductCardProps) {
             </span>
             <span className="flex items-center gap-1 text-amber-400">
               <Star size={12} className="fill-amber-400" />
-              <span className="font-bold text-slate-200">4.9</span>
+              <span className="font-bold text-slate-200">
+                {product.rating != null ? Number(product.rating).toFixed(1) : '5.0'}
+              </span>
             </span>
           </div>
 

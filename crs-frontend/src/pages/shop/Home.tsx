@@ -15,6 +15,7 @@ import { ProductCard } from '../../components/ProductCard'
 import { HeroBanner } from '../../components/HeroBanner'
 import { fetchProducts } from '../../services/catalog'
 import { fetchCoupons } from '../../services/coupons'
+import { fetchReviewSummaries } from '../../services/reviews'
 import { useApp } from '../../context/AppContext'
 import type { Product, Coupon } from '../../types'
 
@@ -29,30 +30,40 @@ export function Home() {
     let mounted = true
     Promise.all([
       fetchCoupons().catch(() => []),
-      fetchProducts({ per_page: 50 }).catch(() => [])
-    ]).then(([couponsRes, prodsRes]) => {
+      fetchProducts({ per_page: 50 }).catch(() => []),
+      fetchReviewSummaries().catch(() => ({} as Record<number, any>)),
+    ]).then(([couponsRes, prodsRes, reviewsSummaryRes]) => {
       if (!mounted) return
       const cList = Array.isArray(couponsRes) ? couponsRes : (couponsRes?.data ?? [])
       setApiCoupons(cList)
 
+      const revMap = reviewsSummaryRes || {}
       const pList = Array.isArray(prodsRes) ? prodsRes : (prodsRes?.data ?? [])
       if (pList.length > 0) {
         setHomeProducts(
           pList
             .filter((p: any) => p.isActive !== false && p.status !== 'inactive' && p.is_active !== false)
-            .map((item: any) => ({
-              ...item,
-              id: Number(item.id),
-              price: Number(item.price ?? 0),
-              oldPrice: item.oldPrice != null ? Number(item.oldPrice) : (item.old_price != null ? Number(item.old_price) : undefined),
-              tag: item.tag || undefined,
-              category: typeof item.category === 'object' && item.category !== null ? item.category.name : (item.category ?? 'Khác'),
-              brand: typeof item.brand === 'object' && item.brand !== null ? item.brand.name : (item.brand ?? 'STRIKER'),
-              image: item.image || item.image_url || (Array.isArray(item.images) && item.images.length > 0 ? item.images[0] : '') || '',
-              images: Array.isArray(item.images) && item.images.length > 0 ? item.images : ((item.image || item.image_url) ? [item.image || item.image_url] : []),
-              colors: Array.isArray(item.colors) && item.colors.length > 0 ? item.colors : ['Standard'],
-              sizes: Array.isArray(item.sizes) && item.sizes.length > 0 ? item.sizes : ['Standard'],
-            }))
+            .map((item: any) => {
+              const rInfo = revMap[item.id] || revMap[Number(item.id)]
+              const dynamicRating = rInfo?.avg_rating ? Number(rInfo.avg_rating) : 5.0
+              const dynamicCount = rInfo?.review_count ? Number(rInfo.review_count) : 0
+
+              return {
+                ...item,
+                id: Number(item.id),
+                price: Number(item.price ?? 0),
+                oldPrice: item.oldPrice != null ? Number(item.oldPrice) : (item.old_price != null ? Number(item.old_price) : undefined),
+                tag: item.tag || undefined,
+                rating: dynamicRating,
+                reviewsCount: dynamicCount,
+                category: typeof item.category === 'object' && item.category !== null ? item.category.name : (item.category ?? 'Khác'),
+                brand: typeof item.brand === 'object' && item.brand !== null ? item.brand.name : (item.brand ?? 'STRIKER'),
+                image: item.image || item.image_url || (Array.isArray(item.images) && item.images.length > 0 ? item.images[0] : '') || '',
+                images: Array.isArray(item.images) && item.images.length > 0 ? item.images : ((item.image || item.image_url) ? [item.image || item.image_url] : []),
+                colors: Array.isArray(item.colors) && item.colors.length > 0 ? item.colors : ['Standard'],
+                sizes: Array.isArray(item.sizes) && item.sizes.length > 0 ? item.sizes : ['Standard'],
+              }
+            })
         )
       }
     })

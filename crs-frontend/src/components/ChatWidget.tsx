@@ -130,8 +130,8 @@ export const ChatWidget: React.FC = () => {
     }
   };
 
-  // Khi Giỏ hàng (CartDrawer) đang mở -> Ẩn ChatWidget để không bị đè lên nút Thanh toán
-  if (cartDrawerOpen) {
+  // Khi Giỏ hàng (CartDrawer) đang mở hoặc tài khoản là Admin -> Ẩn ChatWidget khách hàng
+  if (cartDrawerOpen || user?.role === 'admin') {
     return null;
   }
 

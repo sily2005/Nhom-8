@@ -60,11 +60,6 @@ class Order extends Model
         return $this->belongsTo(User::class);
     }
 
-    public function paymentTransactions(): HasMany
-    {
-        return $this->hasMany(PaymentTransaction::class);
-    }
-
     public function getTotalPriceAttribute(): float
     {
         return (float) ($this->total_amount ?? 0);

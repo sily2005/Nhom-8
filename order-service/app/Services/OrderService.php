@@ -5,10 +5,10 @@ namespace App\Services;
 use App\Models\Cart;
 use App\Models\Order;
 use App\Models\OrderItem;
-use App\Models\PaymentTransaction;
 use Exception;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
@@ -17,7 +17,6 @@ class OrderService
     public function __construct(
         protected CouponService $couponService,
         protected CatalogService $catalogService,
-        protected MomoService $momoService,
         protected GhnService $ghnService
     ) {}
 
@@ -153,47 +152,32 @@ class OrderService
                 $cart->items()->delete();
             }
 
-            // Record initial PaymentTransaction
-            $transaction = null;
-            if ($order->payment_method === 'momo') {
-                $transaction = PaymentTransaction::create([
-                    'order_id' => $order->id,
-                    'gateway' => 'momo',
-                    'amount' => $order->total_amount,
-                    'status' => 'pending',
-                ]);
-            } elseif ($order->payment_method === 'cod') {
-                $transaction = PaymentTransaction::create([
-                    'order_id' => $order->id,
-                    'gateway' => 'cod',
-                    'amount' => $order->total_amount,
-                    'status' => 'pending',
-                    'message' => 'Thanh toán khi nhận hàng (COD)',
-                ]);
-            }
-
             return [
                 'order' => $order,
-                'transaction' => $transaction,
                 'items' => $orderItemsData,
             ];
         });
 
         $order = $orderData['order'];
-        $transaction = $orderData['transaction'];
         $orderedItems = $orderData['items'] ?? [];
 
         // 2. External Call: Deduct stock from Catalog Service (Outside Transaction)
         $this->catalogService->deductStock($orderedItems);
 
-        // 3. External Call: Generate MoMo Payment URL (Outside Transaction)
+        // 3. External Call: Generate MoMo Payment URL via Payment Service (Port 8004)
         $payUrl = null;
-        if ($order->payment_method === 'momo' && $transaction) {
+        if ($order->payment_method === 'momo') {
             try {
-                $momoRes = $this->momoService->createPayment($order, $transaction);
-                $payUrl = $momoRes['payUrl'] ?? null;
+                $paymentServiceUrl = rtrim((string) config('services.microservices.payment', env('PAYMENT_SERVICE_URL', 'http://127.0.0.1:8004')), '/');
+                $response = Http::timeout(6)->post("{$paymentServiceUrl}/api/payment/momo/start", [
+                    'order_id' => $order->id,
+                    'amount' => $order->total_amount,
+                    'user_id' => $order->user_id,
+                    'order_code' => $order->order_code ?? $order->order_number,
+                ]);
+                $payUrl = $response->json('data.pay_url');
             } catch (Exception $ex) {
-                Log::warning('MoMo create payment warning in store: ' . $ex->getMessage());
+                Log::warning('Lỗi gọi sang payment-service để tạo link MoMo: ' . $ex->getMessage());
             }
         }
 
@@ -211,7 +195,7 @@ class OrderService
      */
     public function listOrders(array $filters = []): array
     {
-        $orders = Order::with(['user', 'items', 'coupon', 'paymentTransactions'])
+        $orders = Order::with(['user', 'items', 'coupon'])
             ->when($filters['user_id'] ?? null, fn ($q, $uid) => $q->where('user_id', $uid))
             ->when($filters['status'] ?? null, function ($q, $st): void {
                 if ($st !== 'all' && $st !== 'ALL') {

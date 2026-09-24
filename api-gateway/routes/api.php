@@ -4,32 +4,35 @@ use App\Http\Controllers\GatewayController;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Route;
 
+// MoMo Browser Callback Redirect Handler
 Route::get('/payment/momo/callback', function (Illuminate\Http\Request $request) {
-    $orderService = rtrim((string) config('services.microservices.order', 'http://127.0.0.1:8003'), '/');
+    $paymentService = rtrim((string) config('services.microservices.payment', 'http://127.0.0.1:8004'), '/');
 
-    // 1. Gọi sang Order Service để ghi nhận trạng thái thanh toán đơn hàng vào Database
+    // 1. Gửi callback sang Payment Service (Port 8004) để xác thực chữ ký HMAC và đồng bộ đơn hàng
     try {
-        Http::get("{$orderService}/api/payment/momo/callback", $request->query());
+        Http::get("{$paymentService}/api/payment/momo/callback", $request->query());
     } catch (\Exception $e) {
-        \Illuminate\Support\Facades\Log::error('Lỗi gọi callback order-service từ api:', ['error' => $e->getMessage()]);
+        \Illuminate\Support\Facades\Log::error('Lỗi gọi callback payment-service từ api-gateway:', ['error' => $e->getMessage()]);
     }
 
     $status = (string) $request->input('resultCode', '0') === '0' ? 'success' : 'failed';
-    // 2. Trả về chuyển hướng trực tiếp cho trình duyệt về trang đơn hàng Frontend React
+    // 2. Chuyển hướng trình duyệt về trang kết quả đơn hàng Frontend React
     return redirect("http://localhost:5173/orders?status={$status}");
 });
 
+// MoMo Server Webhook IPN Handler
 Route::post('/payment/momo/ipn', function (Illuminate\Http\Request $request) {
-    $orderService = rtrim((string) config('services.microservices.order', 'http://127.0.0.1:8003'), '/');
+    $paymentService = rtrim((string) config('services.microservices.payment', 'http://127.0.0.1:8004'), '/');
     try {
-        $response = Http::post("{$orderService}/api/payment/momo/ipn", $request->all());
+        $response = Http::post("{$paymentService}/api/payment/momo/ipn", $request->all());
         return response($response->body(), $response->status(), $response->headers());
     } catch (\Exception $e) {
-        \Illuminate\Support\Facades\Log::error('Lỗi gọi IPN order-service từ api:', ['error' => $e->getMessage()]);
+        \Illuminate\Support\Facades\Log::error('Lỗi gọi IPN payment-service từ api-gateway:', ['error' => $e->getMessage()]);
         return response()->json(['message' => 'Internal Error'], 500);
     }
 });
 
+// Auth Service Routes
 Route::any('/auth/{any?}', [GatewayController::class, 'auth'])->where('any', '.*');
 Route::any('/addresses/{any?}', [GatewayController::class, 'auth'])->where('any', '.*');
 Route::any('/users/{any?}', [GatewayController::class, 'auth'])->where('any', '.*');
@@ -58,15 +61,19 @@ Route::match(['POST', 'PUT', 'PATCH', 'DELETE'], '/products/restore-stock', func
     ], 403);
 });
 
+// Catalog Service Routes
 Route::any('/categories/{any?}', [GatewayController::class, 'catalog'])->where('any', '.*');
 Route::any('/products/{any?}', [GatewayController::class, 'catalog'])->where('any', '.*');
-
 Route::any('/brands/{any?}', [GatewayController::class, 'catalog'])->where('any', '.*');
 Route::any('/banners/{any?}', [GatewayController::class, 'catalog'])->where('any', '.*');
+
+// Order Service Routes
 Route::any('/cart/{any?}', [GatewayController::class, 'order'])->where('any', '.*');
 Route::any('/orders/{any?}', [GatewayController::class, 'order'])->where('any', '.*');
 Route::any('/coupons/{any?}', [GatewayController::class, 'order'])->where('any', '.*');
 Route::any('/reviews/{any?}', [GatewayController::class, 'order'])->where('any', '.*');
 Route::any('/shipping/{any?}', [GatewayController::class, 'order'])->where('any', '.*');
+
+// Payment Service Routes (Port 8004)
 Route::any('/payments/{any?}', [GatewayController::class, 'payment'])->where('any', '.*');
-Route::any('/payment/{any?}', [GatewayController::class, 'order'])->where('any', '.*');
+Route::any('/payment/{any?}', [GatewayController::class, 'payment'])->where('any', '.*');

@@ -1,23 +1,42 @@
 import api from './api.js'
 
-export interface PaymentSetting {
-  id?: number
-  bank_code: string
-  bank_name?: string
-  account_number: string
-  account_name: string
-  syntax_prefix?: string
-  template?: string
-  is_active?: boolean
+export interface InitiateMomoPayload {
+  order_id: number | string
+  amount: number
+  user_id?: number | string
+  order_code?: string
+  order_number?: string
 }
 
-export async function fetchPaymentSettings(): Promise<PaymentSetting> {
-  const response = await api.get('/payments/settings')
-  return response.data?.data ?? response.data
+export interface MomoInitiateResponse {
+  pay_url: string
+  order_id: number
+  payment_id: number
+  transaction_id: number
+  momo_response?: any
 }
 
-export async function updatePaymentSettings(payload: Partial<PaymentSetting>): Promise<PaymentSetting> {
-  const response = await api.put('/payments/settings', payload)
-  return response.data?.data ?? response.data
+/**
+ * Call payment-service to initialize a MoMo QR / ATM payment link
+ */
+export async function initiateMomoPayment(payload: InitiateMomoPayload): Promise<MomoInitiateResponse | null> {
+  try {
+    const response = await api.post('/payment/momo/start', payload)
+    return response.data?.data ?? null
+  } catch (error) {
+    console.error('Lỗi khởi tạo thanh toán MoMo:', error)
+    return null
+  }
 }
 
+/**
+ * Get payment status from payment-service
+ */
+export async function fetchPaymentStatus(orderId: number | string) {
+  try {
+    const response = await api.get('/payments/status', { params: { order_id: orderId } })
+    return response.data?.data ?? null
+  } catch {
+    return null
+  }
+}

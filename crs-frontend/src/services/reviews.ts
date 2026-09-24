@@ -23,6 +23,21 @@ export async function fetchReviews(productId: number): Promise<Review[]> {
   return data.map(mapDbReview)
 }
 
+export interface ReviewSummaryItem {
+  product_id: number
+  avg_rating: string | number
+  review_count: number
+}
+
+export async function fetchReviewSummaries(): Promise<Record<number, ReviewSummaryItem>> {
+  try {
+    const response = await api.get('/reviews/summary')
+    return response.data?.data ?? {}
+  } catch {
+    return {}
+  }
+}
+
 export interface CreateReviewPayload {
   order_id: string
   product_id: number

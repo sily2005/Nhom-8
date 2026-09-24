@@ -73,7 +73,7 @@ class OrderController extends Controller
             return response()->json([
                 'success' => true,
                 'message' => 'Đặt hàng thành công.',
-                'data' => $result['order']->load(['items', 'coupon', 'paymentTransactions']),
+                'data' => $result['order']->load(['items', 'coupon']),
                 'pay_url' => $result['pay_url'],
                 'errors' => null,
             ], 201);
@@ -143,7 +143,7 @@ class OrderController extends Controller
         return response()->json([
             'success' => true,
             'message' => 'Lấy thông tin đơn hàng thành công.',
-            'data' => $order->load(['items', 'coupon', 'paymentTransactions']),
+            'data' => $order->load(['items', 'coupon']),
             'errors' => null,
         ]);
     }
@@ -207,14 +207,31 @@ class OrderController extends Controller
     }
 
     /**
-     * Alias for createGhnShipping.
+     * Mark an order as paid (called by payment-service upon successful payment).
      */
-    public function shipWithGHN(Request $request, $order): JsonResponse
+    public function markPaid(Request $request, $order): JsonResponse
     {
         $orderModel = $order instanceof Order
             ? $order
-            : Order::where('id', $order)->orWhere('order_number', $order)->orWhere('order_code', $order)->firstOrFail();
+            : Order::where('id', $order)->orWhere('order_number', $order)->orWhere('order_code', $order)->first();
 
-        return $this->createGhnShipping($request, $orderModel);
+        if (!$orderModel) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Không tìm thấy đơn hàng.',
+            ], 404);
+        }
+
+        $orderModel->update([
+            'payment_status' => 'paid',
+            'order_status' => 'pending',
+            'status' => 'pending',
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => "Đơn hàng #{$orderModel->id} đã được cập nhật thanh toán thành công.",
+            'data' => $orderModel->fresh(),
+        ]);
     }
 }

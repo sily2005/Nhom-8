@@ -41,6 +41,8 @@ export type Product = {
   image: string
   images?: string[]
   tag?: string
+  rating?: number
+  reviewsCount?: number
   stock: number
   description: string
   colors: string[]

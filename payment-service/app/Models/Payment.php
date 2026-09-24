@@ -23,4 +23,9 @@ class Payment extends Model
     {
         return $this->belongsTo(User::class);
     }
+
+    public function transactions(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(PaymentTransaction::class);
+    }
 }

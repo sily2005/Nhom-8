@@ -32,21 +32,27 @@ class ChatController extends Controller
     {
         $adminId = $this->getAdminId();
 
-        // 1. Tìm tất cả ID của người dùng có tương tác với admin
-        $userIds = Message::where('receiver_id', $adminId)
-            ->orWhere('sender_id', $adminId)
+        // 1. Tìm tất cả ID của người dùng (khách hàng) có tương tác với admin
+        $userIds = Message::where(function ($q) use ($adminId) {
+                $q->where('receiver_id', $adminId)->where('sender_id', '!=', $adminId);
+            })
+            ->orWhere(function ($q) use ($adminId) {
+                $q->where('sender_id', $adminId)->where('receiver_id', '!=', $adminId);
+            })
             ->orderBy('created_at', 'desc')
             ->get()
             ->map(function ($msg) use ($adminId) {
-                return $msg->sender_id == $adminId ? $msg->receiver_id : $msg->sender_id;
+                return (int) ($msg->sender_id == $adminId ? $msg->receiver_id : $msg->sender_id);
             })
+            ->filter(fn ($id) => $id !== (int) $adminId)
             ->unique()
             ->values()
             ->toArray();
 
-        // 2. Lấy thông tin chi tiết các User đó
+        // 2. Lấy thông tin chi tiết các khách hàng đó (loại bỏ admin)
         $users = User::whereIn('id', $userIds)
             ->where('id', '!=', $adminId)
+            ->where('role', '!=', 'admin')
             ->select('id', 'name', 'email', 'phone_number', 'avatar', 'role', 'created_at')
             ->get();
 
@@ -94,6 +100,7 @@ class ChatController extends Controller
         $query = trim((string) $request->input('query', ''));
 
         $customers = User::where('id', '!=', $adminId)
+            ->where('role', '!=', 'admin')
             ->when($query !== '', function ($q) use ($query) {
                 $q->where(function ($sub) use ($query) {
                     $sub->where('name', 'like', "%{$query}%")

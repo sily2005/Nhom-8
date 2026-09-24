@@ -19,6 +19,7 @@ Route::get('/orders/stats', [OrderController::class, 'stats']);
 Route::post('/orders', [OrderController::class, 'store']);
 Route::get('/orders/{order}', [OrderController::class, 'show']);
 Route::patch('/orders/{order}/status', [OrderController::class, 'updateStatus']);
+Route::post('/orders/{order}/mark-paid', [OrderController::class, 'markPaid']);
 Route::post('/orders/{order}/ship-ghn', [OrderController::class, 'shipWithGHN']);
 
 // Coupon / Voucher Routes
@@ -31,6 +32,7 @@ Route::delete('/coupons/{coupon}', [CouponController::class, 'destroy']);
 Route::post('/coupons/apply', [CouponController::class, 'apply']);
 
 // Review Routes
+Route::get('/reviews/summary', [ReviewController::class, 'summary']);
 Route::get('/reviews', [ReviewController::class, 'index']);           // ?product_id=X
 Route::post('/reviews', [ReviewController::class, 'store']);
 Route::get('/reviews/check', [ReviewController::class, 'check']);     // ?order_id=X&product_id=Y&user_id=Z
@@ -42,9 +44,3 @@ Route::get('/shipping/wards', [ShippingController::class, 'wards']);
 Route::post('/shipping/fee', [ShippingController::class, 'calculateFee']);
 Route::post('/shipping/ghn/webhook', [ShippingController::class, 'webhook']);
 Route::post('/ghn/webhook', [ShippingController::class, 'webhook']);
-
-// MoMo Payment Routes
-Route::post('/payment/momo/ipn', [\App\Http\Controllers\User\MomoController::class, 'ipn'])->name('api.payment.momo.ipn');
-Route::get('/payment/momo/callback', [\App\Http\Controllers\User\MomoController::class, 'callback'])->name('api.payment.momo.callback');
-Route::get('/orders/{order}/pay/momo', [\App\Http\Controllers\User\MomoController::class, 'payAgain'])->name('api.orders.momo.pay');
-Route::get('/orders/{order}/start-momo', [\App\Http\Controllers\User\MomoController::class, 'start'])->name('api.orders.momo.start');
