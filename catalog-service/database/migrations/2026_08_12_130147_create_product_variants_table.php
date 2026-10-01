@@ -19,7 +19,7 @@ return new class extends Migration
             $table->decimal('sale_price', 12, 2)->nullable();
             $table->unsignedInteger('stock')->default(0);
             $table->json('attributes');
-            $table->boolean('is_active')->default(true);
+            $table->boolean('is_active')->default(true)->index();
 
             $table->timestamps();
         });
