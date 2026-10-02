@@ -1,5 +1,5 @@
 import React, { Component, useEffect, type ErrorInfo, type ReactNode } from 'react'
-import { BrowserRouter, Navigate, Route, Routes, useNavigate } from 'react-router-dom'
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { Toaster } from 'sonner'
 import { AppProvider, useApp } from './context/AppContext'
 import { ShopLayout } from './layouts/ShopLayout'
@@ -16,6 +16,8 @@ import { VerifyEmail } from './pages/shop/VerifyEmail'
 import { ForgotPassword } from './pages/shop/ForgotPassword'
 import { LoginPage } from './pages/shop/LoginPage'
 import { RegisterPage } from './pages/shop/RegisterPage'
+import { PaymentCallback } from './pages/shop/PaymentCallback'
+import { ScrollToTop } from './components/ScrollToTop'
 // Trang phía Quản trị
 import {
     Dashboard,
@@ -24,6 +26,7 @@ import {
     Vouchers as AdminVouchers,
     Customers as AdminCustomers,
     Settings as AdminSettings,
+    AdminFinance,
 } from './pages/admin'
 
 
@@ -118,7 +121,6 @@ function ShopRoutes() {
         <ShopLayout>
             <Routes>
                 <Route path="/" element={<Home />} />
-                <Route path="/about" element={<Home />} />
                 <Route path="/shop" element={<Shop />} />
                 <Route path="/product/:id" element={<ProductDetail />} />
                 <Route path="/cart" element={<CartRedirect />} />
@@ -130,6 +132,7 @@ function ShopRoutes() {
                         </ProtectedRoute>
                     }
                 />
+                <Route path="/payment/callback" element={<PaymentCallback />} />
                 <Route
                     path="/orders"
                     element={
@@ -158,16 +161,12 @@ function AdminApp() {
             <Routes>
                 <Route element={<AdminLayout />}>
                     <Route path="/" element={<Dashboard />} />
+                    <Route path="/finance" element={<AdminFinance />} />
                     <Route path="/products" element={<AdminProducts />} />
                     <Route path="/orders" element={<AdminOrders />} />
                     <Route path="/vouchers" element={<AdminVouchers />} />
                     <Route path="/customers" element={<AdminCustomers />} />
                     <Route path="/settings" element={<AdminSettings />} />
-
-                    {/* Legacy Route Aliases */}
-                    <Route path="/categories" element={<Navigate to="/admin/products" replace />} />
-                    <Route path="/coupons" element={<Navigate to="/admin/vouchers" replace />} />
-                    <Route path="/users" element={<Navigate to="/admin/customers" replace />} />
                     <Route path="*" element={<Navigate to="/admin" replace />} />
                 </Route>
             </Routes>
@@ -175,24 +174,12 @@ function AdminApp() {
     )
 }
 
-function LegacyNavigationRepair() {
-    const navigate = useNavigate()
-    useEffect(() => {
-        const onHashChange = () => {
-            if (window.location.hash === '#forgot') navigate('/forgot-password')
-        }
-        window.addEventListener('hashchange', onHashChange)
-        return () => window.removeEventListener('hashchange', onHashChange)
-    }, [navigate])
-    return null
-}
-
 export default function App() {
     return (
         <ErrorBoundary>
             <AppProvider>
                 <BrowserRouter>
-                    <LegacyNavigationRepair />
+                    <ScrollToTop />
                     <Routes>
                         <Route path="/admin/*" element={<AdminApp />} />
                         <Route path="*" element={<UserApp />} />
