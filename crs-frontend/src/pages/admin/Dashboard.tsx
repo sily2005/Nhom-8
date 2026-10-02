@@ -10,9 +10,7 @@ import {
   Plus,
   TicketPercent,
   Store,
-  Sparkles,
-  Layers,
-  ArrowRight
+  Layers
 } from 'lucide-react';
 import { fetchAdminOrders, fetchOrderStats, mapBackendOrder, type OrderStats } from '../../services/orders';
 import { fetchProducts } from '../../services/catalog';
@@ -46,7 +44,6 @@ const formatShortCurrency = (val: number): string => {
 const parseOrderDate = (dateStr: string): Date => {
   if (!dateStr) return new Date();
   if (dateStr.includes('/')) {
-    // format DD/MM/YYYY HH:mm or DD/MM/YYYY
     const parts = dateStr.split(' ')[0].split('/');
     if (parts.length === 3) {
       const day = parseInt(parts[0], 10);
@@ -104,20 +101,18 @@ export const Dashboard: React.FC = () => {
     };
   }, []);
 
-  // 4. Dynamic KPI Calculations
-  // Total Revenue: Chỉ tính các đơn ĐÃ GIAO THÀNH CÔNG / ĐÃ THANH TOÁN (delivered, paid) và trừ sạch voucher, không cộng phí ship
+  // 1. Dynamic KPI Calculations
+  // Total Revenue: Chỉ tính các đơn ĐÃ GIAO THÀNH CÔNG (delivered, paid)
   const completedOrders = useMemo(
-    () => orders.filter((o) => (o.status === 'delivered' || o.status === 'paid' || o.paymentStatus === 'paid') && o.status !== 'cancelled'),
+    () => orders.filter((o) => o.status === 'delivered' || o.status === 'paid'),
     [orders]
   );
   const totalRevenue = useMemo(
-    () => (typeof orderStats.revenue === 'number' && orderStats.revenue > 0)
-      ? orderStats.revenue
-      : completedOrders.reduce((sum, o) => sum + Math.max(0, (o.subtotal || o.total || 0) - (o.discountAmount || 0)), 0),
-    [orderStats.revenue, completedOrders]
+    () => completedOrders.reduce((sum, o) => sum + Number(o.total || 0), 0),
+    [completedOrders]
   );
 
-  // Tổng số sản phẩm đã bán ra thực tế trong các đơn thành công
+  // Tổng số sản phẩm đã bán ra thực tế
   const totalSoldItemsCount = useMemo(() => {
     return completedOrders.reduce((sum, o) => {
       if (o.itemsList && o.itemsList.length > 0) {
@@ -148,7 +143,7 @@ export const Dashboard: React.FC = () => {
     [productsList]
   );
 
-  // 5. Dynamic Neon Chart Dataset grouped by timeRange from real orders (Net revenue)
+  // 2. Dynamic Neon Chart Dataset grouped by timeRange from real orders
   const chartData = useMemo(() => {
     if (timeRange === '7days') {
       let baseDate = new Date();
@@ -179,7 +174,7 @@ export const Dashboard: React.FC = () => {
             od.getMonth() === d.getMonth() &&
             od.getFullYear() === d.getFullYear()
           ) {
-            const netRev = Math.max(0, (o.subtotal || o.total || 0) - (o.discountAmount || 0));
+            const netRev = Number(o.total || (o.subtotal || 0) - (o.discountAmount || 0));
             dayRevenue += netRev;
             dayOrderCount += 1;
           }
@@ -198,197 +193,144 @@ export const Dashboard: React.FC = () => {
       completedOrders.forEach((o) => {
         const od = parseOrderDate(o.date);
         const d = od.getDate();
-        const netRev = Math.max(0, (o.subtotal || o.total || 0) - (o.discountAmount || 0));
-        for (const w of weeks) {
+        weeks.forEach((w) => {
           if (d >= w.startDay && d <= w.endDay) {
+            const netRev = Number(o.total || (o.subtotal || 0) - (o.discountAmount || 0));
             w.revenue += netRev;
             w.orders += 1;
-            break;
           }
-        }
+        });
       });
-      return weeks;
+      return weeks.map((w) => ({
+        label: w.label,
+        dateStr: w.label,
+        revenue: w.revenue,
+        orders: w.orders,
+      }));
     } else {
-      const months = Array.from({ length: 12 }, (_, idx) => ({
-        label: `T${idx + 1}`,
+      // 12 Months
+      const months = [
+        'T1', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'T8', 'T9', 'T10', 'T11', 'T12',
+      ].map((m, idx) => ({
+        label: m,
+        dateStr: m,
+        monthIdx: idx,
         revenue: 0,
         orders: 0,
       }));
+
       completedOrders.forEach((o) => {
         const od = parseOrderDate(o.date);
-        const m = od.getMonth();
-        const netRev = Math.max(0, (o.subtotal || o.total || 0) - (o.discountAmount || 0));
-        if (m >= 0 && m < 12) {
-          months[m].revenue += netRev;
-          months[m].orders += 1;
+        const mIdx = od.getMonth();
+        if (months[mIdx]) {
+          const netRev = Number(o.total || (o.subtotal || 0) - (o.discountAmount || 0));
+          months[mIdx].revenue += netRev;
+          months[mIdx].orders += 1;
         }
       });
+
       return months;
     }
   }, [timeRange, orders, completedOrders]);
 
+  // Max value in dataset for proper scaling
   const maxRevenue = useMemo(() => {
-    const rawMax = Math.max(...chartData.map((d) => d.revenue), 0);
-    if (rawMax <= 0) return 5000000;
-    // Round up with 15% headroom so the peak doesn't hit the ceiling
-    return Math.ceil((rawMax * 1.15) / 1000000) * 1000000;
+    const vals = chartData.map((d) => d.revenue);
+    const maxVal = Math.max(...vals, 0);
+    return maxVal > 0 ? Math.ceil(maxVal * 1.2) : 5000000;
   }, [chartData]);
 
+  // Aggregate totals
   const periodTotal = useMemo(() => chartData.reduce((sum, d) => sum + d.revenue, 0), [chartData]);
   const peakDay = useMemo(() => {
-    let peak = chartData[0] || { label: '', revenue: 0, orders: 0 };
-    chartData.forEach((d) => {
-      if (d.revenue > peak.revenue) peak = d;
-    });
-    return peak;
+    return chartData.reduce(
+      (max, d) => (d.revenue > max.revenue ? d : max),
+      { label: '', revenue: 0, orders: 0 }
+    );
   }, [chartData]);
 
+  // Smooth SVG Bezier curves
   const svgCurveData = useMemo(() => {
-    const N = chartData.length;
-    if (N === 0) return { linePath: '', areaPath: '', points: [] };
+    if (chartData.length === 0) return { linePath: '', areaPath: '', points: [] };
 
-    const W = 1000;
-    const padTop = 15;
-    const padBottom = 205;
-    const range = padBottom - padTop;
+    const svgWidth = 1000;
+    const svgHeight = 220;
+    const paddingX = 60;
+    const usableWidth = svgWidth - paddingX * 2;
+    const usableHeight = svgHeight - 30;
 
-    const points = chartData.map((d, i) => {
-      const x = ((i + 0.5) / N) * W;
-      const ratio = maxRevenue > 0 ? Math.min(1, Math.max(0, d.revenue / maxRevenue)) : 0;
-      const y = padBottom - ratio * range;
-      return { x, y, revenue: d.revenue, label: d.label, orders: d.orders };
+    const points = chartData.map((item, idx) => {
+      const step = chartData.length > 1 ? usableWidth / (chartData.length - 1) : usableWidth / 2;
+      const x = paddingX + idx * step;
+      const ratio = maxRevenue > 0 ? item.revenue / maxRevenue : 0;
+      const y = svgHeight - ratio * usableHeight - 15;
+      return { x, y, revenue: item.revenue, label: item.label };
     });
 
     if (points.length === 1) {
-      return {
-        linePath: `M 0 ${points[0].y} L ${W} ${points[0].y}`,
-        areaPath: `M 0 ${padBottom} L 0 ${points[0].y} L ${W} ${points[0].y} L ${W} ${padBottom} Z`,
-        points,
-      };
+      return { linePath: '', areaPath: '', points };
     }
 
     let linePath = `M ${points[0].x} ${points[0].y}`;
     for (let i = 0; i < points.length - 1; i++) {
-      const p0 = points[i];
-      const p1 = points[i + 1];
-      const cx1 = p0.x + (p1.x - p0.x) / 2;
-      const cy1 = p0.y;
-      const cx2 = p0.x + (p1.x - p0.x) / 2;
-      const cy2 = p1.y;
-      linePath += ` C ${cx1} ${cy1}, ${cx2} ${cy2}, ${p1.x} ${p1.y}`;
+      const p0 = points[i === 0 ? i : i - 1];
+      const p1 = points[i];
+      const p2 = points[i + 1];
+      const p3 = points[i + 2 < points.length ? i + 2 : i + 1];
+
+      const cp1x = p1.x + (p2.x - p0.x) / 6;
+      const cp1y = p1.y + (p2.y - p0.y) / 6;
+      const cp2x = p2.x - (p3.x - p1.x) / 6;
+      const cp2y = p2.y - (p3.y - p1.y) / 6;
+
+      linePath += ` C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${p2.x} ${p2.y}`;
     }
 
-    let areaPath = `M ${points[0].x} ${padBottom} L ${points[0].x} ${points[0].y}`;
-    for (let i = 0; i < points.length - 1; i++) {
-      const p0 = points[i];
-      const p1 = points[i + 1];
-      const cx1 = p0.x + (p1.x - p0.x) / 2;
-      const cy1 = p0.y;
-      const cx2 = p0.x + (p1.x - p0.x) / 2;
-      const cy2 = p1.y;
-      areaPath += ` C ${cx1} ${cy1}, ${cx2} ${cy2}, ${p1.x} ${p1.y}`;
-    }
-    areaPath += ` L ${points[points.length - 1].x} ${padBottom} Z`;
+    const firstPt = points[0];
+    const lastPt = points[points.length - 1];
+    const areaPath = `${linePath} L ${lastPt.x} ${svgHeight} L ${firstPt.x} ${svgHeight} Z`;
 
     return { linePath, areaPath, points };
   }, [chartData, maxRevenue]);
 
-  // 6. Recent Orders: Top 5-10 orders sorted by date descending
-  const recentOrders = useMemo(() => {
-    return [...orders]
-      .sort((a, b) => parseOrderDate(b.date).getTime() - parseOrderDate(a.date).getTime())
-      .slice(0, 6);
-  }, [orders]);
-
-  // 7. Top Selling Products: Aggregated from itemsList of delivered/completed orders
-  const topSellingProducts = useMemo(() => {
-    const salesMap = new Map<number | string, { unitsSold: number; revenue: number; item: any }>();
-
-    completedOrders.forEach((order) => {
-      order.itemsList?.forEach((item: any) => {
-        const key = item.id || item.name;
-        const existing = salesMap.get(key);
-        const qty = item.quantity || 1;
-        const rev = (item.price || 0) * qty;
-        if (existing) {
-          existing.unitsSold += qty;
-          existing.revenue += rev;
-        } else {
-          salesMap.set(key, {
-            unitsSold: qty,
-            revenue: rev,
-            item,
-          });
-        }
-      });
-    });
-
-    const sorted = Array.from(salesMap.values()).sort((a, b) => b.unitsSold - a.unitsSold);
-
-    if (sorted.length > 0) {
-      return sorted.slice(0, 4).map(({ unitsSold, revenue, item }, idx) => {
-        const catalogProd = productsList.find((p) => p.id === item.id);
-        const actualPrice = item.price || catalogProd?.price || 0;
-        return {
-          id: item.id || idx,
-          name: item.name || catalogProd?.name || 'Sản phẩm',
-          image: catalogProd?.image || item.image || (productsList[0]?.image ?? 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=300&q=80'),
-          price: actualPrice,
-          unitsSold,
-          revenueTotal: revenue,
-        };
-      });
-    }
-
-    // Fallback to top products from catalog
-    return productsList.slice(0, 4).map((p, idx) => ({
-      id: p.id,
-      name: p.name,
-      image: p.image,
-      price: p.price,
-      unitsSold: Math.max(1, 4 - idx),
-      revenueTotal: p.price * Math.max(1, 4 - idx),
-    }));
-  }, [completedOrders, productsList]);
-
   return (
-    <div className="space-y-8 animate-in fade-in duration-300">
-      {/* 1. Page Header & Live Greeting */}
-      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 bg-zinc-900/60 backdrop-blur-xl border border-zinc-800/80 p-6 rounded-3xl shadow-2xl relative overflow-hidden">
+    <div className="space-y-6 animate-in fade-in duration-300 pb-8">
+      {/* 1. Page Header & Actions */}
+      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 bg-zinc-900/60 backdrop-blur-xl border border-zinc-800/80 p-5 sm:p-6 rounded-3xl shadow-xl relative overflow-hidden">
         <div className="absolute right-0 top-0 w-96 h-full bg-gradient-to-l from-lime-500/10 to-transparent pointer-events-none" />
         <div>
           <div className="flex items-center gap-2 text-xs font-mono text-lime-400 font-semibold uppercase tracking-widest">
             <Zap className="w-3.5 h-3.5 fill-lime-400" />
             <span>STRIKER COMMAND CENTER • REALTIME METRICS</span>
           </div>
-          <h1 className="text-2xl sm:text-3xl font-black text-white mt-1 uppercase tracking-tight flex items-center gap-2">
+          <h1 className="text-xl sm:text-2xl font-black text-white mt-1 uppercase tracking-tight flex items-center gap-2">
             Bảng Điều Khiển Tổng Quan
             <span className="text-lime-400">.</span>
           </h1>
-          <p className="text-sm text-zinc-400 mt-1">
+          <p className="text-xs text-zinc-400 mt-1">
             Tổng hợp dữ liệu kinh doanh, hiệu suất bán lẻ và lưu lượng giao dịch thời gian thực.
           </p>
         </div>
 
-        {/* Quick Top Actions */}
-        <div className="flex flex-wrap items-center gap-3">
+        {/* Quick Actions */}
+        <div className="flex flex-wrap items-center gap-2.5">
           <Link
             to="/admin/products"
-            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-lime-400 text-zinc-950 font-bold text-xs uppercase tracking-wider hover:bg-lime-300 shadow-lg shadow-lime-400/20 hover:scale-105 transition-all"
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-lime-400 text-zinc-950 font-bold text-xs uppercase tracking-wider hover:bg-lime-300 shadow-md shadow-lime-400/20 hover:scale-105 transition-all"
           >
             <Plus className="w-4 h-4 stroke-[3]" />
             <span>Thêm sản phẩm</span>
           </Link>
           <Link
             to="/admin/vouchers"
-            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-zinc-800/80 hover:bg-zinc-800 border border-zinc-700 text-xs font-bold text-white hover:border-lime-500/50 transition-all"
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-zinc-800/80 hover:bg-zinc-800 border border-zinc-700 text-xs font-bold text-white hover:border-lime-500/50 transition-all"
           >
             <TicketPercent className="w-4 h-4 text-lime-400" />
             <span>Tạo Voucher</span>
           </Link>
           <Link
             to="/admin/settings"
-            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-zinc-800/80 hover:bg-zinc-800 border border-zinc-700 text-xs font-bold text-white hover:border-lime-500/50 transition-all"
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-zinc-800/80 hover:bg-zinc-800 border border-zinc-700 text-xs font-bold text-white hover:border-lime-500/50 transition-all"
           >
             <Store className="w-4 h-4 text-emerald-400" />
             <span>Cài đặt Shop</span>
@@ -397,65 +339,40 @@ export const Dashboard: React.FC = () => {
       </div>
 
       {/* 2. 4 Cyber-Sport Dynamic KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* KPI 1: Doanh Thu */}
-        <div className="group relative bg-zinc-900/60 backdrop-blur-xl border border-zinc-800/80 hover:border-lime-500/50 p-6 rounded-2xl shadow-xl transition-all duration-300 overflow-hidden">
-          <div className="absolute top-0 right-0 w-32 h-32 bg-lime-400/5 rounded-full blur-2xl group-hover:bg-lime-400/10 transition-all" />
+        <div className="group relative bg-zinc-900/60 backdrop-blur-xl border border-zinc-800/80 hover:border-lime-500/50 p-5 rounded-2xl shadow-lg transition-all duration-300 overflow-hidden">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-zinc-400 uppercase tracking-wider">Tổng Doanh Thu</span>
-            <div className="w-10 h-10 rounded-xl bg-lime-400/10 border border-lime-400/30 flex items-center justify-center text-lime-400">
-              <DollarSign className="w-5 h-5" />
+            <div className="w-9 h-9 rounded-xl bg-lime-400/10 border border-lime-400/30 flex items-center justify-center text-lime-400">
+              <DollarSign className="w-4 h-4" />
             </div>
           </div>
-          <div className="mt-4">
-            <div className="text-2xl sm:text-3xl font-black font-mono tracking-tight text-white">
+          <div className="mt-3">
+            <div className="text-2xl font-black font-mono tracking-tight text-white">
               {totalRevenue.toLocaleString('vi-VN')}₫
             </div>
-            <div className="flex items-center gap-2 mt-2">
-              <span className="inline-flex items-center gap-1.5 text-xs font-mono font-bold text-lime-400 bg-lime-400/10 px-2.5 py-1 rounded-xl border border-lime-400/20">
-                <ShoppingBag className="w-3.5 h-3.5" /> Đã bán {totalSoldItemsCount} sản phẩm
+            <div className="flex items-center gap-2 mt-1.5">
+              <span className="inline-flex items-center gap-1 text-[11px] font-mono font-bold text-lime-400 bg-lime-400/10 px-2 py-0.5 rounded-lg border border-lime-400/20">
+                <ShoppingBag className="w-3 h-3" /> Đã bán {totalSoldItemsCount} sản phẩm
               </span>
             </div>
-          </div>
-          {/* Mini Sparkline SVG */}
-          <div className="mt-4 pt-3 border-t border-zinc-800/60">
-            <svg className="w-full h-8 overflow-visible" viewBox="0 0 100 25">
-              <path
-                d="M0,20 Q15,8 30,16 T60,5 T80,12 T100,2"
-                fill="none"
-                stroke="#a3e635"
-                strokeWidth="2.5"
-                strokeLinecap="round"
-              />
-              <path
-                d="M0,20 Q15,8 30,16 T60,5 T80,12 T100,2 L100,25 L0,25 Z"
-                fill="url(#limeGradient)"
-                opacity="0.3"
-              />
-              <defs>
-                <linearGradient id="limeGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#a3e635" />
-                  <stop offset="100%" stopColor="transparent" />
-                </linearGradient>
-              </defs>
-            </svg>
           </div>
         </div>
 
         {/* KPI 2: Tổng Đơn Hàng */}
-        <div className="group relative bg-zinc-900/60 backdrop-blur-xl border border-zinc-800/80 hover:border-sky-500/50 p-6 rounded-2xl shadow-xl transition-all duration-300 overflow-hidden">
-          <div className="absolute top-0 right-0 w-32 h-32 bg-sky-400/5 rounded-full blur-2xl group-hover:bg-sky-400/10 transition-all" />
+        <div className="group relative bg-zinc-900/60 backdrop-blur-xl border border-zinc-800/80 hover:border-sky-500/50 p-5 rounded-2xl shadow-lg transition-all duration-300 overflow-hidden">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-zinc-400 uppercase tracking-wider">Tổng Đơn Hàng</span>
-            <div className="w-10 h-10 rounded-xl bg-sky-400/10 border border-sky-400/30 flex items-center justify-center text-sky-400">
-              <ShoppingBag className="w-5 h-5" />
+            <div className="w-9 h-9 rounded-xl bg-sky-400/10 border border-sky-400/30 flex items-center justify-center text-sky-400">
+              <ShoppingBag className="w-4 h-4" />
             </div>
           </div>
-          <div className="mt-4">
-            <div className="text-2xl sm:text-3xl font-black font-mono tracking-tight text-white">
-              {totalOrdersCount} <span className="text-sm font-sans font-normal text-zinc-400">đơn</span>
+          <div className="mt-3">
+            <div className="text-2xl font-black font-mono tracking-tight text-white">
+              {totalOrdersCount} <span className="text-xs font-sans font-normal text-zinc-400">đơn</span>
             </div>
-            <div className="flex items-center gap-2 mt-2">
+            <div className="flex items-center gap-2 mt-1.5">
               <span className="inline-flex items-center gap-1 text-[11px] font-mono text-zinc-300">
                 <span className="text-amber-400 font-bold">{pendingOrdersCount}</span> chờ •
                 <span className="text-sky-400 font-bold"> {shippingOrdersCount}</span> giao •
@@ -466,69 +383,43 @@ export const Dashboard: React.FC = () => {
               </span>
             </div>
           </div>
-          {/* Mini Sparkline SVG */}
-          <div className="mt-4 pt-3 border-t border-zinc-800/60">
-            <svg className="w-full h-8 overflow-visible" viewBox="0 0 100 25">
-              <path
-                d="M0,18 Q20,12 40,20 T70,8 T100,4"
-                fill="none"
-                stroke="#38bdf8"
-                strokeWidth="2.5"
-                strokeLinecap="round"
-              />
-            </svg>
-          </div>
         </div>
 
         {/* KPI 3: Khách Hàng */}
-        <div className="group relative bg-zinc-900/60 backdrop-blur-xl border border-zinc-800/80 hover:border-purple-500/50 p-6 rounded-2xl shadow-xl transition-all duration-300 overflow-hidden">
-          <div className="absolute top-0 right-0 w-32 h-32 bg-purple-400/5 rounded-full blur-2xl group-hover:bg-purple-400/10 transition-all" />
+        <div className="group relative bg-zinc-900/60 backdrop-blur-xl border border-zinc-800/80 hover:border-purple-500/50 p-5 rounded-2xl shadow-lg transition-all duration-300 overflow-hidden">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-zinc-400 uppercase tracking-wider">Khách Hàng</span>
-            <div className="w-10 h-10 rounded-xl bg-purple-400/10 border border-purple-400/30 flex items-center justify-center text-purple-400">
-              <Users className="w-5 h-5" />
+            <div className="w-9 h-9 rounded-xl bg-purple-400/10 border border-purple-400/30 flex items-center justify-center text-purple-400">
+              <Users className="w-4 h-4" />
             </div>
           </div>
-          <div className="mt-4">
-            <div className="text-2xl sm:text-3xl font-black font-mono tracking-tight text-white">
-              {totalCustomersCount} <span className="text-sm font-sans font-normal text-zinc-400">tài khoản</span>
+          <div className="mt-3">
+            <div className="text-2xl font-black font-mono tracking-tight text-white">
+              {totalCustomersCount} <span className="text-xs font-sans font-normal text-zinc-400">tài khoản</span>
             </div>
-            <div className="flex items-center gap-2 mt-2">
-              <span className="inline-flex items-center gap-1 text-xs font-mono font-bold text-purple-400 bg-purple-400/10 px-2 py-0.5 rounded border border-purple-400/20">
+            <div className="flex items-center gap-2 mt-1.5">
+              <span className="inline-flex items-center gap-1 text-[11px] font-mono font-bold text-purple-400 bg-purple-400/10 px-2 py-0.5 rounded border border-purple-400/20">
                 <TrendingUp className="w-3 h-3" /> Thành viên
               </span>
               <span className="text-[11px] text-zinc-400">Đang hoạt động</span>
             </div>
           </div>
-          {/* Mini Sparkline SVG */}
-          <div className="mt-4 pt-3 border-t border-zinc-800/60">
-            <svg className="w-full h-8 overflow-visible" viewBox="0 0 100 25">
-              <path
-                d="M0,22 Q25,18 50,10 T80,14 T100,2"
-                fill="none"
-                stroke="#c084fc"
-                strokeWidth="2.5"
-                strokeLinecap="round"
-              />
-            </svg>
-          </div>
         </div>
 
         {/* KPI 4: Sản Phẩm & Tồn Kho */}
-        <div className="group relative bg-zinc-900/60 backdrop-blur-xl border border-zinc-800/80 hover:border-amber-500/50 p-6 rounded-2xl shadow-xl transition-all duration-300 overflow-hidden">
-          <div className="absolute top-0 right-0 w-32 h-32 bg-amber-400/5 rounded-full blur-2xl group-hover:bg-amber-400/10 transition-all" />
+        <div className="group relative bg-zinc-900/60 backdrop-blur-xl border border-zinc-800/80 hover:border-amber-500/50 p-5 rounded-2xl shadow-lg transition-all duration-300 overflow-hidden">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-zinc-400 uppercase tracking-wider">Sản Phẩm & Kho</span>
-            <div className="w-10 h-10 rounded-xl bg-amber-400/10 border border-amber-400/30 flex items-center justify-center text-amber-400">
-              <Package className="w-5 h-5" />
+            <div className="w-9 h-9 rounded-xl bg-amber-400/10 border border-amber-400/30 flex items-center justify-center text-amber-400">
+              <Package className="w-4 h-4" />
             </div>
           </div>
-          <div className="mt-4">
-            <div className="text-2xl sm:text-3xl font-black font-mono tracking-tight text-white">
-              {totalSkuCount} <span className="text-sm font-sans font-normal text-zinc-400">SKU</span>
+          <div className="mt-3">
+            <div className="text-2xl font-black font-mono tracking-tight text-white">
+              {totalSkuCount} <span className="text-xs font-sans font-normal text-zinc-400">SKU</span>
             </div>
-            <div className="flex items-center gap-2 mt-2">
-              <span className="inline-flex items-center gap-1 text-xs font-mono font-bold text-amber-400 bg-amber-400/10 px-2 py-0.5 rounded border border-amber-400/20">
+            <div className="flex items-center gap-2 mt-1.5">
+              <span className="inline-flex items-center gap-1 text-[11px] font-mono font-bold text-amber-400 bg-amber-400/10 px-2 py-0.5 rounded border border-amber-400/20">
                 <Layers className="w-3 h-3" /> {totalStockCount} tồn kho
               </span>
               {lowStockCount > 0 && (
@@ -536,25 +427,13 @@ export const Dashboard: React.FC = () => {
               )}
             </div>
           </div>
-          {/* Mini Sparkline SVG */}
-          <div className="mt-4 pt-3 border-t border-zinc-800/60">
-            <svg className="w-full h-8 overflow-visible" viewBox="0 0 100 25">
-              <path
-                d="M0,15 Q30,5 60,18 T100,8"
-                fill="none"
-                stroke="#fbbf24"
-                strokeWidth="2.5"
-                strokeLinecap="round"
-              />
-            </svg>
-          </div>
         </div>
       </div>
 
-      {/* 3. Neon Area & Pillar Chart (Doanh thu phát sáng từ mảng orders thực tế) */}
-      <section className="bg-zinc-900/60 backdrop-blur-xl border border-zinc-800/80 p-6 sm:p-8 rounded-3xl shadow-2xl relative overflow-hidden">
+      {/* 3. Neon Area & Pillar Chart (Biểu Đồ Doanh Thu) */}
+      <section className="bg-zinc-900/60 backdrop-blur-xl border border-zinc-800/80 p-5 sm:p-7 rounded-3xl shadow-xl relative overflow-hidden">
         {/* Header toolbar */}
-        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 pb-6 border-b border-zinc-800/80">
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 pb-5 border-b border-zinc-800/80">
           <div>
             <div className="flex items-center gap-2">
               <span className="w-2.5 h-2.5 rounded-full bg-lime-400 animate-pulse shadow-[0_0_8px_#a3e635]" />
@@ -562,14 +441,13 @@ export const Dashboard: React.FC = () => {
                 DOANH THU & HIỆU SUẤT TĂNG TRƯỞNG
               </span>
             </div>
-            <h2 className="text-xl sm:text-2xl font-black text-white mt-1 uppercase tracking-wide">
+            <h2 className="text-lg sm:text-xl font-black text-white mt-1 uppercase tracking-wide">
               Biểu Đồ Doanh Thu Neon
             </h2>
           </div>
 
           {/* Quick Metrics & Timeframe selector */}
           <div className="flex flex-wrap items-center gap-3">
-            {/* Metric pill 1: Tổng kỳ */}
             <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-zinc-950/80 border border-zinc-800 text-xs">
               <span className="text-zinc-400">Tổng kỳ:</span>
               <span className="font-mono font-black text-lime-400">
@@ -577,7 +455,6 @@ export const Dashboard: React.FC = () => {
               </span>
             </div>
 
-            {/* Metric pill 2: Đỉnh cao nhất */}
             {peakDay.revenue > 0 && (
               <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-zinc-950/80 border border-zinc-800 text-xs">
                 <span className="text-zinc-400">Đỉnh cao:</span>
@@ -607,7 +484,7 @@ export const Dashboard: React.FC = () => {
         </div>
 
         {/* Dynamic Glowing Chart Canvas */}
-        <div className="mt-8 relative">
+        <div className="mt-6 relative">
           <div className="h-72 sm:h-80 w-full relative flex">
             {/* Left Y-Axis Labels */}
             <div className="w-14 sm:w-16 h-[220px] flex flex-col justify-between items-end pr-3 select-none text-[11px] font-mono text-zinc-400 shrink-0">
@@ -647,12 +524,10 @@ export const Dashboard: React.FC = () => {
                   </filter>
                 </defs>
 
-                {/* Area Gradient Fill */}
                 {svgCurveData.areaPath && (
                   <path d={svgCurveData.areaPath} fill="url(#neonAreaGradient)" />
                 )}
 
-                {/* Glowing Spline Line */}
                 {svgCurveData.linePath && (
                   <>
                     <path
@@ -673,7 +548,6 @@ export const Dashboard: React.FC = () => {
                   </>
                 )}
 
-                {/* Data Points on Line */}
                 {svgCurveData.points.map((pt, idx) => (
                   <g key={idx}>
                     {hoveredPoint === idx && (
@@ -708,7 +582,6 @@ export const Dashboard: React.FC = () => {
               <div className="absolute inset-x-0 top-0 h-full flex items-end justify-between gap-1 sm:gap-3 z-10">
                 {chartData.map((item, idx) => {
                   const ratio = maxRevenue > 0 ? item.revenue / maxRevenue : 0;
-                  // Exact proportional bar height (from 0 to 100% of the 220px plot area)
                   const heightPercent = item.revenue > 0 ? Math.max(12, Math.min(100, ratio * 100)) : 3;
                   const isHovered = hoveredPoint === idx;
 
@@ -740,9 +613,8 @@ export const Dashboard: React.FC = () => {
                         </div>
                       )}
 
-                      {/* Bar Pillar Container (Height: 220px) */}
+                      {/* Bar Pillar Container */}
                       <div className="w-full max-w-[42px] sm:max-w-[54px] h-[220px] flex flex-col justify-end items-center relative">
-                        {/* Direct floating badge on top of prominent bars */}
                         {item.revenue > 0 && (
                           <div
                             className={`mb-1.5 px-1.5 py-0.5 rounded-md text-[10px] font-mono font-black tracking-tight transition-all duration-200 whitespace-nowrap select-none ${isHovered
@@ -754,7 +626,6 @@ export const Dashboard: React.FC = () => {
                           </div>
                         )}
 
-                        {/* Neon Glowing Bar */}
                         <div
                           style={{ height: `${heightPercent}%` }}
                           className={`w-full rounded-t-xl transition-all duration-500 relative flex flex-col justify-between ${item.revenue > 0
@@ -764,7 +635,6 @@ export const Dashboard: React.FC = () => {
                               : 'bg-zinc-800/40 border-t border-zinc-700/60'
                             }`}
                         >
-                          {/* Top White Glow Cap */}
                           {item.revenue > 0 && (
                             <div className="h-1 bg-white/90 rounded-t-xl w-full shadow-[0_0_6px_#ffffff]" />
                           )}
@@ -792,177 +662,8 @@ export const Dashboard: React.FC = () => {
           </div>
         </div>
       </section>
-
-      {/* 4. Two-Column Grid: Recent Orders & Top Selling Products */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-        {/* Left (7 Cols): Đơn Hàng Mới Nhất */}
-        <section className="lg:col-span-7 bg-zinc-900/60 backdrop-blur-xl border border-zinc-800/80 p-6 rounded-3xl shadow-2xl flex flex-col justify-between">
-          <div>
-            <div className="flex items-center justify-between pb-4 border-b border-zinc-800/80">
-              <div className="flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-lime-400 animate-ping" />
-                <h3 className="text-lg font-black text-white uppercase tracking-wide">
-                  Đơn Hàng Mới Nhất ({orders.length})
-                </h3>
-              </div>
-              <Link
-                to="/admin/orders"
-                className="text-xs font-bold text-lime-400 hover:text-lime-300 inline-flex items-center gap-1 group"
-              >
-                <span>Xem tất cả</span>
-                <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
-              </Link>
-            </div>
-
-            {/* Orders List */}
-            <div className="mt-4 divide-y divide-zinc-800/60">
-              {recentOrders.map((order) => (
-                <div key={order.id} className="py-3.5 flex items-center justify-between gap-3 group hover:bg-zinc-800/30 px-2 rounded-xl transition">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-zinc-800 border border-zinc-700 flex items-center justify-center font-mono font-bold text-xs text-lime-400">
-                      #{order.id.slice(-3)}
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono text-xs font-bold text-white group-hover:text-lime-400 transition">
-                          {order.id}
-                        </span>
-                        {order.ghnTrackingCode && (
-                          <span className="text-[10px] font-mono text-zinc-400 bg-zinc-800 px-1.5 py-0.5 rounded">
-                            {order.ghnTrackingCode}
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-xs text-zinc-400 mt-0.5">
-                        {order.customer.name} • {order.itemsCount || order.itemsList?.length || 1} sản phẩm • {order.date}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="text-right">
-                    <div className="text-sm font-black font-mono text-white">
-                      {order.total.toLocaleString('vi-VN')}₫
-                    </div>
-                    <div className="mt-1">
-                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold font-mono uppercase ${order.status === 'delivered' || (order as any).status === 'paid'
-                          ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
-                          : order.status === 'shipping'
-                            ? 'bg-sky-500/10 text-sky-400 border border-sky-500/30'
-                            : order.status === 'pending'
-                              ? 'bg-amber-500/10 text-amber-400 border border-amber-500/30'
-                              : 'bg-red-500/10 text-red-400 border border-red-500/30'
-                        }`}>
-                        <span className="w-1.5 h-1.5 rounded-full bg-current" />
-                        {order.status === 'delivered'
-                          ? 'Đã giao'
-                          : order.status === 'shipping'
-                            ? 'Đang giao'
-                            : order.status === 'pending'
-                              ? 'Chờ duyệt'
-                              : order.status === 'cancelled'
-                                ? 'Đã hủy'
-                                : order.status}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              ))}
-
-              {recentOrders.length === 0 && (
-                <div className="py-8 text-center text-xs text-zinc-500">
-                  Chưa có đơn hàng nào trong hệ thống.
-                </div>
-              )}
-            </div>
-          </div>
-
-          <div className="mt-4 pt-4 border-t border-zinc-800/80 flex items-center justify-between text-xs text-zinc-500">
-            <span>Hiển thị {recentOrders.length} đơn hàng mới nhất</span>
-            <Link to="/admin/orders" className="text-zinc-400 hover:text-white font-medium">
-              Quản lý toàn bộ đơn hàng →
-            </Link>
-          </div>
-        </section>
-
-        {/* Right (5 Cols): Top Sản Phẩm Bán Chạy */}
-        <section className="lg:col-span-5 bg-zinc-900/60 backdrop-blur-xl border border-zinc-800/80 p-6 rounded-3xl shadow-2xl flex flex-col justify-between">
-          <div>
-            <div className="flex items-center justify-between pb-4 border-b border-zinc-800/80">
-              <div className="flex items-center gap-2">
-                <Sparkles className="w-4 h-4 text-lime-400" />
-                <h3 className="text-lg font-black text-white uppercase tracking-wide">
-                  Top Bán Chạy
-                </h3>
-              </div>
-              <span className="text-xs font-mono text-zinc-400">THỰC TẾ</span>
-            </div>
-
-            <div className="mt-4 space-y-3">
-              {topSellingProducts.map((p, idx) => (
-                <div
-                  key={p.id}
-                  className="p-3 rounded-2xl bg-zinc-950/40 border border-zinc-800/60 hover:border-lime-500/40 flex items-center gap-3 group transition"
-                >
-                  {/* Rank Badge */}
-                  <div className={`w-7 h-7 rounded-lg flex items-center justify-center font-black font-mono text-xs ${idx === 0
-                      ? 'bg-yellow-400 text-zinc-950 shadow-md shadow-yellow-400/20'
-                      : idx === 1
-                        ? 'bg-zinc-300 text-zinc-950'
-                        : idx === 2
-                          ? 'bg-amber-600 text-white'
-                          : 'bg-zinc-800 text-zinc-400'
-                    }`}>
-                    #{idx + 1}
-                  </div>
-
-                  {/* Thumbnail */}
-                  <img
-                    src={p.image}
-                    alt={p.name}
-                    className="w-12 h-12 rounded-xl object-cover border border-zinc-800"
-                  />
-
-                  {/* Info */}
-                  <div className="flex-1 min-w-0">
-                    <h4 className="text-xs font-bold text-white truncate group-hover:text-lime-400 transition">
-                      {p.name}
-                    </h4>
-                    <div className="flex items-center gap-2 mt-0.5">
-                      <span className="text-[11px] font-mono font-bold text-lime-400">
-                        {p.price.toLocaleString('vi-VN')}₫
-                      </span>
-                      {p.revenueTotal > 0 && (
-                        <span className="text-[10px] text-zinc-400">
-                          • Thu: {p.revenueTotal.toLocaleString('vi-VN')}₫
-                        </span>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Right Badge: Số lượt đã bán */}
-                  <div className="shrink-0 text-right">
-                    <span className="px-2.5 py-1 rounded-xl bg-lime-400/10 border border-lime-400/30 text-lime-400 font-mono font-bold text-xs shadow-sm">
-                      {p.unitsSold} đã bán
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="mt-4 pt-4 border-t border-zinc-800/80 text-center">
-            <Link
-              to="/admin/products"
-              className="text-xs font-bold text-lime-400 hover:underline inline-flex items-center gap-1"
-            >
-              Xem toàn bộ danh mục sản phẩm →
-            </Link>
-          </div>
-        </section>
-      </div>
     </div>
   );
 };
 
 export default Dashboard;
-
