@@ -12,6 +12,8 @@ return new class extends Migration
             $table->id();
 
             $table->string('code', 50)->unique();
+            $table->string('title')->nullable();
+            $table->text('description')->nullable();
             $table->string('type', 20); // fixed / percent
             $table->decimal('value', 12, 2);
 
@@ -27,6 +29,7 @@ return new class extends Migration
             $table->timestamp('starts_at')->nullable();
             $table->timestamp('expires_at')->nullable();
 
+            $table->softDeletes();
             $table->timestamps();
 
             $table->index(['starts_at', 'expires_at']);
