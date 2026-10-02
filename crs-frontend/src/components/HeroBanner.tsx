@@ -142,3 +142,5 @@ export function HeroBanner() {
     </section>
   )
 }
+
+// Updated for Catalog Service

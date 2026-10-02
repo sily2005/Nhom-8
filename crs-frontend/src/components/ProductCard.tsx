@@ -135,3 +135,5 @@ export function ProductCard({ product, className = '' }: ProductCardProps) {
     </motion.div>
   )
 }
+
+// Updated for Catalog Service

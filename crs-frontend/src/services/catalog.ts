@@ -35,3 +35,5 @@ export async function deleteProduct(id: number) {
   const response = await api.delete(`/products/${id}`)
   return response.data?.data ?? response.data
 }
+
+// Updated for Catalog Service

@@ -1299,3 +1299,5 @@ export const Settings: React.FC = () => {
 };
 
 export default Settings;
+
+// Updated for Catalog Service

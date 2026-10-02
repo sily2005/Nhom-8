@@ -472,3 +472,4 @@ export function Shop() {
     </section>
   )
 }
+// Updated for Catalog Service

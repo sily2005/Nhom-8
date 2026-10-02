@@ -1327,3 +1327,5 @@ export const Products: React.FC = () => {
 };
 
 export default Products;
+
+// Updated for Catalog Service

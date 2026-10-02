@@ -871,3 +871,5 @@ export function ProductDetail() {
     </div>
   )
 }
+
+// Updated for Catalog Service

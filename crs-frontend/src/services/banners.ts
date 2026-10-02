@@ -33,3 +33,5 @@ export function mapDbBanner(raw: Record<string, any>): BannerSlide {
     isActive: Boolean(raw.is_active ?? raw.isActive ?? true),
   }
 }
+
+// Updated for Catalog Service
