@@ -12,12 +12,14 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Tymon\JWTAuth\Contracts\JWTSubject;
 
-#[Fillable(['name', 'email', 'phone_number', 'password', 'role', 'avatar', 'is_active'])]
+#[Fillable(['name', 'email', 'phone', 'phone_number', 'password', 'role', 'is_active'])]
 #[Hidden(['password', 'remember_token'])]
 class User extends Authenticatable implements JWTSubject
 {
     /** @use HasFactory<UserFactory> */
     use HasFactory, Notifiable;
+
+    protected $appends = ['phone_number'];
 
     public function getJWTIdentifier(): mixed
     {
@@ -27,6 +29,16 @@ class User extends Authenticatable implements JWTSubject
     public function getJWTCustomClaims(): array
     {
         return [];
+    }
+
+    public function getPhoneNumberAttribute(): ?string
+    {
+        return $this->attributes['phone'] ?? null;
+    }
+
+    public function setPhoneNumberAttribute(?string $value): void
+    {
+        $this->attributes['phone'] = $value;
     }
 
     /**
@@ -51,4 +63,3 @@ class User extends Authenticatable implements JWTSubject
         return $this->hasMany(Address::class)->orderByDesc('is_default');
     }
 }
-

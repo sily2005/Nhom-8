@@ -8,10 +8,13 @@ use Illuminate\Http\Request;
 use App\Http\Requests\LoginRequest;
 use App\Http\Requests\RegisterRequest;
 use Illuminate\Support\Carbon;
-use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Hash;
 use App\Mail\OtpMail;
+use App\Mail\PasswordResetOtpMail;
+use App\Mail\PasswordResetSuccessMail;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Str;
 
 class AuthController extends Controller
 {
@@ -41,7 +44,7 @@ class AuthController extends Controller
                     $query->where('email', $email);
                 }
                 if ($phoneNumber) {
-                    $query->orWhere('phone_number', $phoneNumber);
+                    $query->orWhere('phone', $phoneNumber);
                 }
             })
             ->exists();
@@ -58,9 +61,9 @@ class AuthController extends Controller
         $user = User::create([
             'name' => trim($validated['name']),
             'email' => $email,
-            'phone_number' => $phoneNumber,
+            'phone' => $phoneNumber,
             'password' => Hash::make($validated['password']),
-            'role' => 'user',
+            'role' => 'customer',
             'is_active' => true,
         ]);
 
@@ -173,7 +176,7 @@ class AuthController extends Controller
         [$email, $phoneNumber] = $this->parseIdentifier($validated['login']);
         $user = $email
             ? User::where('email', $email)->first()
-            : User::where('phone_number', $phoneNumber)->first();
+            : User::where('phone', $phoneNumber)->first();
 
         if (! $user || ! Hash::check($validated['password'], $user->password)) {
             return response()->json([
@@ -199,20 +202,118 @@ class AuthController extends Controller
     }
 
     /**
-     * Request a password reset email.
+     * Send OTP for Password Reset.
+     *
+     * @group Authentication
+     */
+    public function sendResetOtp(Request $request): JsonResponse
+    {
+        $request->validate(['email' => ['required', 'email']]);
+
+        $email = strtolower(trim($request->input('email')));
+        $user = User::where('email', $email)->first();
+
+        if (!$user) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Địa chỉ Email này chưa được đăng ký trong hệ thống STRIKER.',
+                'errors' => ['email' => ['Email không tồn tại trong hệ thống.']],
+            ], 404);
+        }
+
+        // Tạo mã OTP ngẫu nhiên 6 chữ số
+        $otp = (string) random_int(100000, 999999);
+        
+        // Lưu mã OTP vào Cache, gán key là 'password_reset_otp_' . $email, thời hạn 10 phút
+        Cache::put('password_reset_otp_' . $email, $otp, Carbon::now()->addMinutes(10));
+
+        // Gửi email mật mã OTP qua PasswordResetOtpMail
+        try {
+            Mail::to($email)->send(new PasswordResetOtpMail($otp, $user->name));
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::warning('Lỗi gửi mail đặt lại mật khẩu: ' . $e->getMessage());
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Mã OTP đặt lại mật khẩu đã được gửi đến email của bạn.',
+            'data' => [
+                'email' => $email,
+                'expires_in_minutes' => 10,
+            ],
+            'errors' => null,
+        ]);
+    }
+
+    /**
+     * Verify OTP and reset password.
+     *
+     * @group Authentication
+     */
+    public function verifyResetOtp(Request $request): JsonResponse
+    {
+        $request->validate([
+            'email' => ['required', 'email'],
+            'otp' => ['required', 'digits:6'],
+        ]);
+
+        $email = strtolower(trim($request->input('email')));
+        $otp = trim($request->input('otp'));
+
+        // Kiểm tra mã OTP trong Cache
+        $cachedOtp = Cache::get('password_reset_otp_' . $email);
+
+        if (!$cachedOtp || !hash_equals((string) $cachedOtp, (string) $otp)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Mã OTP không chính xác hoặc đã hết thời gian hiệu lực (10 phút).',
+                'errors' => ['otp' => ['Mã OTP không hợp lệ.']],
+            ], 422);
+        }
+
+        $user = User::where('email', $email)->first();
+        if (!$user) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Không tìm thấy tài khoản người dùng.',
+                'errors' => ['email' => ['Tài khoản không tồn tại.']],
+            ], 404);
+        }
+
+        // Tạo mật khẩu mới ngẫu nhiên (hoặc mật khẩu mặc định an toàn)
+        $temporaryPassword = Str::random(8) . '@Stk1';
+        $user->password = Hash::make($temporaryPassword);
+        $user->save();
+
+        // Xóa mã OTP khỏi Cache ngay khi xác thực thành công
+        Cache::forget('password_reset_otp_' . $email);
+
+        // Gửi email thông báo mật khẩu mới
+        try {
+            Mail::to($email)->send(new PasswordResetSuccessMail($temporaryPassword, $user->name));
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::warning('Lỗi gửi mail mật khẩu mới: ' . $e->getMessage());
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Xác thực OTP thành công! Mật khẩu mới đã được khởi tạo và gửi vào email của bạn.',
+            'data' => [
+                'email' => $user->email,
+                'temporary_password' => $temporaryPassword,
+            ],
+            'errors' => null,
+        ]);
+    }
+
+    /**
+     * Request a password reset email (alias for sendResetOtp).
      *
      * @group Authentication
      */
     public function forgotPassword(Request $request): JsonResponse
     {
-        $request->validate(['email' => ['required', 'email']]);
-
-        return response()->json([
-            'success' => true,
-            'message' => 'Nếu email tồn tại trong hệ thống, hướng dẫn đặt lại mật khẩu sẽ được gửi đến hòm thư của bạn.',
-            'data' => null,
-            'errors' => null,
-        ]);
+        return $this->sendResetOtp($request);
     }
 
     /**
@@ -266,7 +367,6 @@ class AuthController extends Controller
             'name' => ['sometimes', 'string', 'max:100'],
             'phone' => ['sometimes', 'nullable', 'string', 'max:20'],
             'phone_number' => ['sometimes', 'nullable', 'string', 'max:20'],
-            'avatar' => ['sometimes', 'nullable', 'string'],
             'current_password' => ['sometimes', 'nullable', 'string'],
             'password' => ['sometimes', 'nullable', 'string', 'min:6'],
         ]);
@@ -275,10 +375,7 @@ class AuthController extends Controller
             $user->name = trim($validated['name']);
         }
         if (isset($validated['phone']) || isset($validated['phone_number'])) {
-            $user->phone_number = $validated['phone'] ?? $validated['phone_number'];
-        }
-        if (isset($validated['avatar'])) {
-            $user->avatar = $validated['avatar'];
+            $user->phone = $validated['phone'] ?? $validated['phone_number'];
         }
 
         if (!empty($validated['password'])) {
@@ -318,7 +415,7 @@ class AuthController extends Controller
                 $q->where(function ($sub) use ($s) {
                     $sub->where('name', 'like', "%{$s}%")
                         ->orWhere('email', 'like', "%{$s}%")
-                        ->orWhere('phone_number', 'like', "%{$s}%");
+                        ->orWhere('phone', 'like', "%{$s}%");
                 });
             })
             ->when($status, function ($q, $st) {
@@ -371,7 +468,6 @@ class AuthController extends Controller
             'errors' => null,
         ]);
     }
-
 
     private function parseIdentifier(string $identifier): array
     {

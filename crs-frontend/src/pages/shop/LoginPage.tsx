@@ -7,15 +7,15 @@ import { login as loginApi } from '../../services/auth'
 import { useApp } from '../../context/AppContext'
 
 export function LoginPage() {
-  const [identifier, setIdentifier] = useState('')
-  const [password, setPassword] = useState('')
+  const location = useLocation()
+  const [identifier, setIdentifier] = useState(location.state?.prefilledEmail || location.state?.email || '')
+  const [password, setPassword] = useState(location.state?.prefilledPassword || '')
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
   const { login } = useApp()
   const navigate = useNavigate()
-  const location = useLocation()
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -53,7 +53,12 @@ export function LoginPage() {
         }
       }
 
-      const errMsg = resData?.message || resData?.errors?.login?.[0] || 'Thông tin đăng nhập không chính xác.'
+      const errMsg =
+        resData?.error?.message ||
+        resData?.message ||
+        resData?.error?.details?.login?.[0] ||
+        resData?.errors?.login?.[0] ||
+        'Thông tin đăng nhập không chính xác.'
       setError(errMsg)
     } finally {
       setLoading(false)
