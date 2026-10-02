@@ -13,6 +13,8 @@ $authRoutes = function (): void {
     Route::post('/register', [AuthController::class, 'register']);
     Route::post('/login', [AuthController::class, 'login']);
     Route::post('/forgot-password', [AuthController::class, 'forgotPassword']);
+    Route::post('/forgot-password/send-otp', [AuthController::class, 'sendResetOtp']);
+    Route::post('/forgot-password/verify-otp', [AuthController::class, 'verifyResetOtp']);
     Route::post('/verify-email', [AuthController::class, 'verifyEmail']);
     Route::post('/resend-otp', [AuthController::class, 'resendOtp']);
 };
@@ -34,11 +36,9 @@ $protectedRoutes = function (): void {
     // Address Management
     Route::get('/addresses', [AddressController::class, 'index']);
     Route::post('/addresses', [AddressController::class, 'store']);
-    Route::put('/addresses/{address}', [AddressController::class, 'update']);
     Route::patch('/addresses/{address}', [AddressController::class, 'update']);
     Route::delete('/addresses/{address}', [AddressController::class, 'destroy']);
     Route::patch('/addresses/{address}/set-default', [AddressController::class, 'setDefault']);
-    Route::patch('/addresses/{address}/default', [AddressController::class, 'setDefault']);
 
     // User Management (Protected Admin APIs)
     Route::get('/users', [AuthController::class, 'getUsers']);
@@ -47,14 +47,6 @@ $protectedRoutes = function (): void {
 
 Route::middleware('auth:api')->group($protectedRoutes);
 Route::prefix('auth')->middleware('auth:api')->group($protectedRoutes);
-
-// Public fallback for direct gateway user query if needed
-Route::get('/users', [AuthController::class, 'getUsers']);
-Route::patch('/users/{user}/status', [AuthController::class, 'updateUserStatus']);
-Route::prefix('auth')->group(function (): void {
-    Route::get('/users', [AuthController::class, 'getUsers']);
-    Route::patch('/users/{user}/status', [AuthController::class, 'updateUserStatus']);
-});
 
 /*
 |--------------------------------------------------------------------------
@@ -69,7 +61,6 @@ $userChatRoutes = function (): void {
     Route::post('/chat/send', [UserChatController::class, 'send'])->name('chat.send');
     Route::get('/chat/messages', [UserChatController::class, 'getMessages'])->name('chat.messages');
 };
-$userChatRoutes();
 Route::prefix('user')->group($userChatRoutes);
 
 // 2. Admin Chat Routes
@@ -82,5 +73,4 @@ $adminChatRoutes = function (): void {
     Route::post('/chat/send', [AdminChatController::class, 'send'])->name('admin.chat.send');
     Route::patch('/chat/messages/{userId}/read', [AdminChatController::class, 'markAsRead'])->name('admin.chat.mark_read');
 };
-$adminChatRoutes();
 Route::prefix('admin')->group($adminChatRoutes);

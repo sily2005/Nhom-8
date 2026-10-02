@@ -53,7 +53,7 @@ class ChatController extends Controller
         $users = User::whereIn('id', $userIds)
             ->where('id', '!=', $adminId)
             ->where('role', '!=', 'admin')
-            ->select('id', 'name', 'email', 'phone_number', 'avatar', 'role', 'created_at')
+            ->select('id', 'name', 'email', 'phone', 'role', 'created_at')
             ->get();
 
         // 3. Đính kèm tin nhắn cuối cùng và số lượng tin nhắn chưa đọc
@@ -73,8 +73,9 @@ class ChatController extends Controller
                 'id' => $user->id,
                 'name' => $user->name,
                 'email' => $user->email,
-                'phone_number' => $user->phone_number,
-                'avatar' => $user->avatar,
+                'phone' => $user->phone,
+                'phone_number' => $user->phone,
+                'avatar' => null,
                 'role' => $user->role,
                 'last_message' => $lastMessage ? $lastMessage->content : '',
                 'last_message_time' => $lastMessage ? $lastMessage->created_at : null,
@@ -105,10 +106,10 @@ class ChatController extends Controller
                 $q->where(function ($sub) use ($query) {
                     $sub->where('name', 'like', "%{$query}%")
                         ->orWhere('email', 'like', "%{$query}%")
-                        ->orWhere('phone_number', 'like', "%{$query}%");
+                        ->orWhere('phone', 'like', "%{$query}%");
                 });
             })
-            ->select('id', 'name', 'email', 'phone_number', 'avatar', 'role', 'created_at')
+            ->select('id', 'name', 'email', 'phone', 'role', 'created_at')
             ->limit(30)
             ->get();
 
@@ -128,8 +129,9 @@ class ChatController extends Controller
                 'id' => $user->id,
                 'name' => $user->name,
                 'email' => $user->email,
-                'phone_number' => $user->phone_number,
-                'avatar' => $user->avatar,
+                'phone' => $user->phone,
+                'phone_number' => $user->phone,
+                'avatar' => null,
                 'role' => $user->role,
                 'last_message' => $lastMessage ? $lastMessage->content : '',
                 'last_message_time' => $lastMessage ? $lastMessage->created_at : null,
@@ -149,7 +151,7 @@ class ChatController extends Controller
      */
     public function getUserDetail(Request $request, $userId): JsonResponse
     {
-        $user = User::select('id', 'name', 'email', 'phone_number', 'avatar', 'role', 'created_at')
+        $user = User::select('id', 'name', 'email', 'phone', 'role', 'created_at')
             ->find($userId);
 
         if (!$user) {
@@ -172,8 +174,9 @@ class ChatController extends Controller
                 'id' => $user->id,
                 'name' => $user->name,
                 'email' => $user->email,
-                'phone_number' => $user->phone_number,
-                'avatar' => $user->avatar,
+                'phone' => $user->phone,
+                'phone_number' => $user->phone,
+                'avatar' => null,
                 'role' => $user->role,
                 'last_message' => $lastMessage ? $lastMessage->content : '',
                 'last_message_time' => $lastMessage ? $lastMessage->created_at : null,

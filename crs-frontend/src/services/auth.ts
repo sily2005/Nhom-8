@@ -90,9 +90,20 @@ export async function resendOtp(email: string) {
 }
 
 export async function forgotPassword(email: string) {
-  const response = await api.post('/auth/forgot-password', { email })
+  const response = await api.post('/auth/forgot-password/send-otp', { email })
   return response.data
 }
+
+export async function sendResetOtp(email: string) {
+  const response = await api.post('/auth/forgot-password/send-otp', { email })
+  return response.data
+}
+
+export async function verifyResetOtp(email: string, otp: string) {
+  const response = await api.post('/auth/forgot-password/verify-otp', { email, otp })
+  return response.data
+}
+
 
 export async function fetchAddresses(userId?: string | number): Promise<Address[]> {
   const response = await api.get('/auth/addresses', { params: userId ? { user_id: userId } : {} })
