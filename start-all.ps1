@@ -1,4 +1,5 @@
 # Free all microservices and frontend ports if held by old background processes
+$env:PHP_CLI_SERVER_WORKERS = 4
 $ports = @(8000, 8001, 8002, 8003, 8004, 5173)
 foreach ($port in $ports) {
     $connections = Get-NetTCPConnection -LocalPort $port -ErrorAction SilentlyContinue
@@ -20,4 +21,4 @@ npx concurrently -n "GATEWAY,AUTH,CATALOG,ORDER,PAY,FRONTEND" `
   "cd catalog-service && php artisan serve --port=8002" `
   "cd order-service && php artisan serve --port=8003" `
   "cd payment-service && php artisan serve --port=8004" `
-  "cd crs-frontend && npm run dev"
+  "cd crs-frontend && npm run dev"
