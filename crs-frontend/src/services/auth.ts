@@ -1,4 +1,4 @@
-import api from './api'
+import api from './api.js'
 import type { Address, User } from '../types'
 
 export function mapDbAddress(raw: Record<string, any>): Address {
@@ -80,7 +80,7 @@ export async function register(
 }
 
 export async function verifyEmail(email: string, otp: string) {
-  const response = await api.post('/auth/verify-email', { email, otp_code: otp, otp })
+  const response = await api.post('/auth/verify-email', { email, otp })
   return response.data
 }
 

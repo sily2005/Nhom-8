@@ -1,4 +1,4 @@
-import api from './api'
+import api from './api.js'
 import type { Product } from '../types'
 
 export async function fetchProducts(params: Record<string, string | number> = {}) {

@@ -94,10 +94,10 @@ export function Orders() {
   const [payingOrderId, setPayingOrderId] = useState<string | number | null>(null)
   const [searchParams, setSearchParams] = useSearchParams()
 
-  const handlePayMoMo = async (orderId: string | number, amount?: number, orderCode?: string) => {
+  const handlePayMoMo = async (orderId: string | number) => {
     try {
       setPayingOrderId(orderId)
-      const payUrl = await getMomoPayUrl(orderId, amount, orderCode)
+      const payUrl = await getMomoPayUrl(orderId)
       if (payUrl) {
         window.location.href = payUrl
       } else {
@@ -480,7 +480,7 @@ export function Orders() {
                       {needsPayment && (
                         <button
                           type="button"
-                          onClick={() => handlePayMoMo(order.id, order.total, order.orderCode || order.id)}
+                          onClick={() => handlePayMoMo(order.id)}
                           disabled={payingOrderId === order.id}
                           className="flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-pink-500 to-rose-500 px-4 py-2.5 font-black text-white hover:brightness-110 transition shadow-lg shadow-pink-500/20 cursor-pointer disabled:opacity-50"
                         >
@@ -902,7 +902,7 @@ export function Orders() {
                         selectedOrder.status !== 'cancelled' && (
                           <button
                             type="button"
-                            onClick={() => handlePayMoMo(selectedOrder.id, selectedOrder.total, selectedOrder.orderCode || selectedOrder.id)}
+                            onClick={() => handlePayMoMo(selectedOrder.id)}
                             disabled={payingOrderId === selectedOrder.id}
                             className="flex items-center gap-1.5 rounded-xl bg-pink-500 px-5 py-2.5 text-xs font-black text-white hover:bg-pink-600 transition shadow-md shadow-pink-500/20 cursor-pointer disabled:opacity-50"
                           >

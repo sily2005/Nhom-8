@@ -1,4 +1,4 @@
-import api from './api'
+import api from './api.js'
 import type { Coupon } from '../types'
 
 export async function fetchCoupons(params: Record<string, string | number> = {}) {

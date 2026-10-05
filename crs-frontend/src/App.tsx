@@ -1,4 +1,4 @@
-import { Component, useEffect, type ErrorInfo, type ReactNode } from 'react'
+import React, { Component, useEffect, type ErrorInfo, type ReactNode } from 'react'
 import { BrowserRouter, Navigate, Route, Routes, useNavigate } from 'react-router-dom'
 import { Toaster } from 'sonner'
 import { AppProvider, useApp } from './context/AppContext'
@@ -16,7 +16,6 @@ import { VerifyEmail } from './pages/shop/VerifyEmail'
 import { ForgotPassword } from './pages/shop/ForgotPassword'
 import { LoginPage } from './pages/shop/LoginPage'
 import { RegisterPage } from './pages/shop/RegisterPage'
-import { ScrollToTop } from './components/ScrollToTop'
 // Trang phía Quản trị
 import {
     Dashboard,
@@ -25,7 +24,6 @@ import {
     Vouchers as AdminVouchers,
     Customers as AdminCustomers,
     Settings as AdminSettings,
-    AdminFinance,
 } from './pages/admin'
 
 
@@ -43,7 +41,7 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
         hasError: false,
     }
 
-    public static getDerivedStateFromError(): ErrorBoundaryState {
+    public static getDerivedStateFromError(_error: Error): ErrorBoundaryState {
         return { hasError: true }
     }
 
@@ -160,7 +158,6 @@ function AdminApp() {
             <Routes>
                 <Route element={<AdminLayout />}>
                     <Route path="/" element={<Dashboard />} />
-                    <Route path="/finance" element={<AdminFinance />} />
                     <Route path="/products" element={<AdminProducts />} />
                     <Route path="/orders" element={<AdminOrders />} />
                     <Route path="/vouchers" element={<AdminVouchers />} />
@@ -195,7 +192,6 @@ export default function App() {
         <ErrorBoundary>
             <AppProvider>
                 <BrowserRouter>
-                    <ScrollToTop />
                     <LegacyNavigationRepair />
                     <Routes>
                         <Route path="/admin/*" element={<AdminApp />} />

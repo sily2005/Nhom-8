@@ -135,9 +135,7 @@ export const Orders: React.FC = () => {
   // Statistics KPI - Lấy trực tiếp từ serverStats hoặc fallback tính trên localOrders
   const totalOrdersCount = serverStats?.total ?? localOrders.length;
   const totalRevenue = useMemo(
-    () => (serverStats?.revenue !== undefined && serverStats.revenue > 0)
-      ? serverStats.revenue 
-      : localOrders.filter((o) => o.status === 'delivered' || o.status === 'paid').reduce((sum, o) => sum + o.total, 0),
+    () => (serverStats?.revenue !== undefined ? serverStats.revenue : localOrders.filter((o) => (o.status === 'delivered' || o.status === 'paid' || o.paymentStatus === 'paid') && o.status !== 'cancelled').reduce((sum, o) => sum + o.total, 0)),
     [serverStats?.revenue, localOrders]
   );
   const pendingCount = useMemo(() => serverStats?.pending ?? localOrders.filter((o) => o.status === 'pending').length, [serverStats?.pending, localOrders]);
@@ -689,11 +687,10 @@ export const Orders: React.FC = () => {
                 const paymentBadge = getPaymentBadge(order);
                 const ghnCode = order.ghn_code || order.ghnTrackingCode;
                 const hasGHN = Boolean(ghnCode);
-                const isDelivered = order.status === 'delivered' || order.status === 'paid';
-                const isShipping = order.status === 'shipping';
-                const isCancelled = order.status === 'cancelled';
-                const isProcessing = order.status === 'processing' || hasGHN;
                 const isPending = order.status === 'pending' && !hasGHN;
+                const isShipping = order.status === 'shipping';
+                const isDelivered = order.status === 'delivered';
+                const isCancelled = order.status === 'cancelled';
                 const isSelected = selectedOrderIds.includes(order.id);
 
                 return (
@@ -705,7 +702,7 @@ export const Orders: React.FC = () => {
                   >
                     {/* Cột Checkbox (chỉ áp dụng cho đơn Chờ xử lý) */}
                     <td className="py-4 px-4 text-center">
-                      {isPending ? (
+                      {isPending && !hasGHN ? (
                         <input
                           type="checkbox"
                           checked={isSelected}
@@ -782,7 +779,7 @@ export const Orders: React.FC = () => {
                         <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-mono text-xs font-bold bg-rose-500/10 text-rose-400 border border-rose-500/30">
                           <Ban className="w-3.5 h-3.5" /> Đã hủy
                         </span>
-                      ) : isProcessing ? (
+                      ) : hasGHN ? (
                         <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-mono text-xs font-bold bg-indigo-500/10 text-indigo-400 border border-indigo-500/30">
                           <Package className="w-3.5 h-3.5" /> Chờ lấy hàng
                         </span>
@@ -797,7 +794,7 @@ export const Orders: React.FC = () => {
                     <td className="py-4 px-6 text-right">
                       <div className="flex items-center justify-end gap-2">
                         {/* TH 1: Chưa tạo đơn GHN & Đơn ở trạng thái Chờ xử lý */}
-                        {isPending && (
+                        {isPending && !hasGHN && (
                           <>
                             <button
                               onClick={() => handleCreateGHNOrder(order)}
@@ -832,10 +829,10 @@ export const Orders: React.FC = () => {
                           </button>
                         )}
 
-                        {/* Mặc định: Nút Xem chi tiết */}
+                        {/* TH 3 & Mặc định: Nút Xem chi tiết */}
                         <button
                           onClick={() => setSelectedOrder(order)}
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-zinc-800 hover:bg-lime-400 hover:text-zinc-950 text-zinc-300 text-xs font-bold transition group cursor-pointer"
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-zinc-800 hover:bg-lime-400 hover:text-zinc-950 text-zinc-300 text-xs font-bold transition group"
                           title="Xem chi tiết đơn hàng"
                         >
                           <Eye className="w-3.5 h-3.5" />
@@ -872,12 +869,11 @@ export const Orders: React.FC = () => {
         const paymentBadge = getPaymentBadge(selectedOrder);
         const ghnCode = selectedOrder.ghn_code || selectedOrder.ghnTrackingCode;
         const hasGHN = Boolean(ghnCode);
-        const isDelivered = selectedOrder.status === 'delivered' || selectedOrder.status === 'paid';
-        const isShipping = selectedOrder.status === 'shipping';
-        const isCancelled = selectedOrder.status === 'cancelled';
-        const isProcessing = selectedOrder.status === 'processing' || hasGHN;
         const isPending = selectedOrder.status === 'pending' && !hasGHN;
-        const currentStepIndex = isDelivered ? 4 : isShipping ? 3 : isProcessing ? 2 : 1;
+        const isShipping = selectedOrder.status === 'shipping';
+        const isDelivered = selectedOrder.status === 'delivered';
+        const isCancelled = selectedOrder.status === 'cancelled';
+        const currentStepIndex = isDelivered ? 4 : isShipping ? 3 : hasGHN ? 2 : 1;
 
         // 4-Step GHN Timeline steps
         const stepperSteps = [
@@ -1143,8 +1139,8 @@ export const Orders: React.FC = () => {
                     </>
                   )}
 
-                  {/* If GHN created / processing but not shipping yet */}
-                  {isProcessing && !isShipping && !isDelivered && !isCancelled && (
+                  {/* If GHN created but not shipping yet */}
+                  {hasGHN && (selectedOrder.status === 'pending' || (selectedOrder as any).status === 'processing') && (
                     <button
                       type="button"
                       onClick={() => handleSimulateGHNPickup(selectedOrder.id)}

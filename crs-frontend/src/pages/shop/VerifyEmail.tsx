@@ -1,74 +1,91 @@
-import { useState, useEffect } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { Mail, RotateCw, ShieldAlert, ArrowRight } from 'lucide-react'
+import { Mail, RotateCw, ShieldAlert } from 'lucide-react'
 import confetti from 'canvas-confetti'
-import { toast } from 'sonner'
+import { useEffect, useState, useRef } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
 import { AuthLayout } from '../../layouts/AuthLayout'
 import { resendOtp, verifyEmail } from '../../services/auth'
 import { useApp } from '../../context/AppContext'
-import { getErrorMessage, isValidOTP } from '../../utils'
-import { OtpInput } from '../../components/OtpInput'
+import { toast } from 'sonner'
 
 export function VerifyEmail() {
   const [params] = useState(() => new URLSearchParams(window.location.search))
   const email = params.get('email') ?? ''
-  
-  const [otp, setOtp] = useState('')
+  const [otp, setOtp] = useState(['', '', '', '', '', ''])
   const [cooldown, setCooldown] = useState(60)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
+  const otpInputsRef = useRef<(HTMLInputElement | null)[]>([])
   const { login } = useApp()
   const navigate = useNavigate()
+  const value = otp.join('')
 
-  // Bộ đếm ngược gửi lại OTP
+  //Tự động focus vào ô đầu tiên khi mở trang
+  useEffect(() => {
+    otpInputsRef.current[0]?.focus()
+  }, [])
+
+  //Bộ đếm ngược thời gian
   useEffect(() => {
     if (cooldown <= 0) return
-    const timer = setInterval(() => setCooldown((c) => c - 1), 1000)
-    return () => clearInterval(timer)
+    const timer = window.setInterval(() => setCooldown((current) => current - 1), 1000)
+    return () => window.clearInterval(timer)
   }, [cooldown])
 
-  const handleVerify = async (codeToVerify?: string) => {
-    const code = codeToVerify || otp
-    if (!isValidOTP(code)) {
+  const update = (index: number, next: string) => {
+    const digit = next.slice(-1).replace(/\D/g, '')
+    const copy = [...otp]
+    copy[index] = digit
+    setOtp(copy)
+    setError('')
+    if (digit && index < 5) otpInputsRef.current[index + 1]?.focus()
+  }
+
+  const paste = (event: React.ClipboardEvent) => {
+    const pasted = event.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6)
+    if (!pasted) return
+    setOtp(Array.from({ length: 6 }, (_, index) => pasted[index] ?? ''))
+    event.preventDefault()
+    const nextFocus = Math.min(pasted.length, 5)
+    otpInputsRef.current[nextFocus]?.focus()
+  }
+
+  const verify = async () => {
+    if (value.length !== 6) {
       setError('Vui lòng nhập đủ 6 chữ số mã OTP')
       return
     }
-
     setLoading(true)
     setError('')
     try {
-      const response = await verifyEmail(email, code)
-      if (response?.user && response?.token) {
-        login(response.user, response.token)
-      }
+      const response = await verifyEmail(email, value)
+      login(response.user, response.token)
       confetti({
-        particleCount: 120,
-        spread: 80,
+        particleCount: 140,
+        spread: 90,
         origin: { y: 0.65 },
         colors: ['#84cc16', '#10b981', '#38bdf8', '#ffffff'],
       })
-      toast.success('Xác minh tài khoản thành công! 🎉')
+      toast.success('🎉 Email đã được xác minh thành công! Đã đăng nhập vào hệ thống.')
       navigate('/')
     } catch (err: any) {
-      const errMsg = getErrorMessage(err, 'Mã OTP không đúng hoặc đã hết hạn sử dụng.')
+      const errMsg = err?.response?.data?.message || 'Mã OTP không đúng hoặc đã hết hạn.'
       setError(errMsg)
     } finally {
       setLoading(false)
     }
   }
 
-  const handleResend = async () => {
-    if (cooldown > 0 || !email || loading) return
-    setError('')
+  const resend = async () => {
+    if (cooldown > 0 || !email) return
     try {
       await resendOtp(email)
       setCooldown(60)
-      setOtp('')
-      toast.success('Mã OTP mới đã được gửi về email của bạn.')
-    } catch (err: any) {
-      toast.error(getErrorMessage(err, 'Không thể gửi lại mã OTP. Vui lòng thử lại sau.'))
+      toast.success('Mã OTP mới đã được gửi về hòm thư của bạn.')
+      setError('')
+    } catch {
+      toast.error('Không thể gửi lại mã OTP. Vui lòng thử lại sau.')
     }
   }
 
@@ -98,7 +115,6 @@ export function VerifyEmail() {
           </p>
         </div>
 
-        {/* Error Alert */}
         {error && (
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
@@ -110,38 +126,41 @@ export function VerifyEmail() {
           </motion.div>
         )}
 
-        {/* Component Nhập OTP 6 số dùng chung */}
-        <div className="py-1">
-          <OtpInput
-            value={otp}
-            onChange={(val) => {
-              setOtp(val)
-              setError('')
-            }}
-            onComplete={(val) => handleVerify(val)}
-            disabled={loading}
-            hasError={Boolean(error)}
-          />
+        {/* 6 OTP Inputs */}
+        <div className="flex justify-center gap-2 sm:gap-3 py-2">
+          {otp.map((digit, index) => (
+            <input
+              id={`otp-${index}`}
+              key={index}
+              ref={(el) => {
+                otpInputsRef.current[index] = el
+              }}
+              value={digit}
+              onChange={(event) => update(index, event.target.value)}
+              onPaste={paste}
+              onKeyDown={(event) => {
+                if (event.key === 'Backspace' && !digit && index > 0)
+                  otpInputsRef.current[index - 1]?.focus()
+              }}
+              inputMode="numeric"
+              maxLength={1}
+              className="h-12 w-10 sm:h-14 sm:w-12 rounded-xl border border-white/10 bg-slate-900/90 text-center font-mono text-xl font-black text-lime-400 outline-none transition focus:border-lime-400 focus:ring-2 focus:ring-lime-400/30"
+            />
+          ))}
         </div>
 
-        {/* Submit Button */}
         <button
-          type="button"
-          disabled={loading || otp.length !== 6}
-          onClick={() => handleVerify()}
-          className="w-full flex items-center justify-center gap-2 rounded-xl bg-lime-400 py-3.5 text-xs sm:text-sm font-black uppercase tracking-wider text-slate-950 transition hover:bg-lime-300 shadow-lg shadow-lime-400/25 disabled:opacity-40 cursor-pointer active:scale-[0.99]"
+          disabled={loading || value.length !== 6}
+          onClick={verify}
+          className="w-full flex items-center justify-center gap-2 rounded-xl bg-lime-400 py-3.5 text-xs sm:text-sm font-black uppercase tracking-wider text-slate-950 transition hover:bg-lime-300 shadow-lg shadow-lime-400/25 disabled:opacity-40"
         >
           {loading ? (
             <span className="h-4 w-4 animate-spin rounded-full border-2 border-slate-950 border-t-transparent" />
           ) : (
-            <>
-              <span>XÁC MINH NGAY</span>
-              <ArrowRight size={16} />
-            </>
+            'XÁC MINH NGAY →'
           )}
         </button>
 
-        {/* Resend Cooldown */}
         <div className="text-xs text-slate-400">
           {cooldown > 0 ? (
             <span>
@@ -149,11 +168,10 @@ export function VerifyEmail() {
             </span>
           ) : (
             <button
-              type="button"
-              onClick={handleResend}
-              className="inline-flex items-center gap-1.5 font-bold text-lime-400 hover:underline cursor-pointer transition"
+              onClick={resend}
+              className="inline-flex items-center gap-1 font-bold text-lime-400 hover:underline"
             >
-              <RotateCw size={13} /> Gửi lại mã OTP
+              <RotateCw size={12} /> Gửi lại mã OTP
             </button>
           )}
         </div>

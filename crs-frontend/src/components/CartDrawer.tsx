@@ -2,10 +2,8 @@ import { useState, useEffect } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { ArrowRight, Minus, Plus, ShoppingBag, Tag, Trash2, X } from 'lucide-react'
 import { Link, useNavigate } from 'react-router-dom'
-import { toast } from 'sonner'
 import { useApp } from '../context/AppContext'
 import { CouponModal } from './CouponModal'
-import { formatVND } from '../utils'
 
 
 const getCartItemImageUrl = (item: any) => {
@@ -37,25 +35,16 @@ export function CartDrawer() {
     toggleSelectAll,
     updateCartVariant,
     user,
+    notify,
   } = useApp()
 
   const [couponModalOpen, setCouponModalOpen] = useState(false)
   const navigate = useNavigate()
 
-  const handleOpenCoupons = () => {
-    setCartDrawerOpen(false)
-    setCouponModalOpen(true)
-  }
-
-  const handleCloseCoupons = () => {
-    setCouponModalOpen(false)
-    setCartDrawerOpen(true)
-  }
-
   const handleCheckout = () => {
     setCartDrawerOpen(false)
     if (!user) {
-      toast.info('Vui lòng đăng nhập để tiến hành thanh toán!')
+      notify('Vui lòng đăng nhập để tiến hành thanh toán!')
       navigate('/login', { state: { from: '/checkout' } })
     } else {
       navigate('/checkout')
@@ -80,7 +69,7 @@ export function CartDrawer() {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               onClick={() => setCartDrawerOpen(false)}
-              className="fixed inset-0 z-50 bg-[#0B0E17]/80 backdrop-blur-sm"
+              className="fixed inset-0 z-[60] bg-[#0B0E17]/80 backdrop-blur-sm"
             />
 
             {/* Slide-out Drawer */}
@@ -89,7 +78,7 @@ export function CartDrawer() {
               animate={{ x: 0 }}
               exit={{ x: '100%' }}
               transition={{ type: 'spring', damping: 28, stiffness: 260 }}
-              className="fixed right-0 top-0 z-50 flex h-full w-full max-w-md flex-col border-l border-white/10 bg-[#131823] p-6 text-white shadow-2xl"
+              className="fixed right-0 top-0 z-[60] flex h-full w-full max-w-md flex-col border-l border-white/10 bg-[#131823] p-6 text-white shadow-2xl"
             >
 
               {/* Header */}
@@ -247,7 +236,7 @@ export function CartDrawer() {
 
                           <div className="flex items-center justify-between pt-1">
                             <span className="font-mono text-xs font-black text-lime-300">
-                              {formatVND(item.price * item.quantity)}
+                              {(item.price * item.quantity).toLocaleString('vi-VN')}đ
                             </span>
 
                             {/* Quantity Control */}
@@ -319,9 +308,8 @@ export function CartDrawer() {
                         </button>
                       )}
                       <button
-                        type="button"
-                        onClick={handleOpenCoupons}
-                        className="rounded-lg bg-lime-400/20 px-2.5 py-1 font-bold text-lime-300 hover:bg-lime-400/30 text-[11px] cursor-pointer"
+                        onClick={() => setCouponModalOpen(true)}
+                        className="rounded-lg bg-lime-400/20 px-2.5 py-1 font-bold text-lime-300 hover:bg-lime-400/30 text-[11px]"
                       >
                         {appliedCoupon ? 'Đổi mã' : 'Chọn Voucher'}
                       </button>
@@ -333,7 +321,7 @@ export function CartDrawer() {
                     <div className="flex justify-between text-slate-400">
                       <span>Tiền hàng</span>
                       <span className="font-mono text-white">
-                        {formatVND(cartSubtotal)}
+                        {cartSubtotal.toLocaleString('vi-VN')}đ
                       </span>
                     </div>
 
@@ -341,7 +329,7 @@ export function CartDrawer() {
                       <div className="flex justify-between text-emerald-400 font-semibold">
                         <span>Giảm giá Voucher ({appliedCoupon?.code})</span>
                         <span className="font-mono">
-                          -{formatVND(discountAmount)}
+                          -{discountAmount.toLocaleString('vi-VN')}đ
                         </span>
                       </div>
                     )}
@@ -349,7 +337,7 @@ export function CartDrawer() {
                     <div className="flex justify-between border-t border-white/10 pt-2 text-sm">
                       <span className="font-bold text-white">Tổng tiền</span>
                       <b className="font-mono text-base font-black text-lime-300">
-                        {formatVND(cartTotal)}
+                        {cartTotal.toLocaleString('vi-VN')}đ
                       </b>
                     </div>
                   </div>
@@ -377,8 +365,7 @@ export function CartDrawer() {
       {/* Coupon Modal */}
       <CouponModal
         isOpen={couponModalOpen}
-        onClose={handleCloseCoupons}
-        onSelectCoupon={handleCloseCoupons}
+        onClose={() => setCouponModalOpen(false)}
       />
     </>
   )

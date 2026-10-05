@@ -17,31 +17,29 @@ import { toast } from 'sonner';
 import { fetchProducts, createProduct, updateProduct, deleteProduct, fetchCategories, fetchBrands } from '../../services/catalog';
 import type { Product, ProductVariant, CategoryItem, BrandItem } from '../../types';
 
-const DEFAULT_CATEGORY: CategoryItem = {
+export const DEFAULT_CATEGORY: CategoryItem = {
   id: 999,
   name: 'Khác',
   description: 'Danh mục mặc định của hệ thống',
   slug: 'khac',
 };
 
-const DEFAULT_BRAND: BrandItem = {
+export const DEFAULT_BRAND: BrandItem = {
   id: 999,
   name: 'Khác',
   description: 'Thương hiệu mặc định của hệ thống',
 };
 
-const getCategoryName = (c: unknown): string => {
+export const getCategoryName = (c: any): string => {
   if (!c) return '';
   if (typeof c === 'string') return c;
-  const obj = c as { name?: string; title?: string };
-  return obj.name || obj.title || '';
+  return c.name || c.title || '';
 };
 
-const getBrandName = (b: unknown): string => {
+export const getBrandName = (b: any): string => {
   if (!b) return '';
   if (typeof b === 'string') return b;
-  const obj = b as { name?: string; title?: string };
-  return obj.name || obj.title || '';
+  return b.name || b.title || '';
 };
 
 // Helpers to identify and ensure system default items

@@ -21,8 +21,7 @@ import {
   ArrowUpRight,
   ShieldCheck,
   MessageSquare,
-  Headphones,
-  Landmark
+  Headphones
 } from 'lucide-react';
 
 export const AdminLayout: React.FC = () => {
@@ -131,7 +130,6 @@ export const AdminLayout: React.FC = () => {
 
   const menuItems = [
     { path: '/admin', label: 'Dashboard', icon: LayoutDashboard },
-    { path: '/admin/finance', label: 'Tài chính & Giao dịch', icon: Landmark },
     { path: '/admin/products', label: 'Quản lý Sản phẩm', icon: Package },
     { 
       path: '/admin/orders', 

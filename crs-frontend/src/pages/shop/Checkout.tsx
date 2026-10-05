@@ -22,7 +22,6 @@ import {
   resolveLocationToGhnIds,
 } from '../../services/shipping'
 import type { Address, Order } from '../../types'
-import { formatVND } from '../../utils'
 
 export function Checkout() {
   const {
@@ -76,7 +75,7 @@ export function Checkout() {
 
   // Form State - Chỉ hỗ trợ 'momo' và 'cod'
   const [note, setNote] = useState('')
-  const [paymentMethod, setPaymentMethod] = useState<'momo' | 'cod'>('cod')
+  const [paymentMethod, setPaymentMethod] = useState<'momo' | 'cod'>('momo')
 
   // Shipping & Modal State
   const [ghnShippingFee, setGhnShippingFee] = useState<number | null>(null)
@@ -370,10 +369,20 @@ export function Checkout() {
                   <div>
                     <h2 className="text-lg font-black text-white">Địa chỉ nhận hàng</h2>
                     <p className="text-xs text-slate-400">
-                      Thông tin người nhận và tính phí vận chuyển GHN Express
+                      Sổ địa chỉ người nhận và tính phí vận chuyển GHN Express
                     </p>
                   </div>
                 </div>
+
+                {user?.addresses && user.addresses.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setAddressModalOpen(true)}
+                    className="text-xs font-bold text-lime-300 hover:underline cursor-pointer"
+                  >
+                    Sổ địa chỉ ({user.addresses.length}) →
+                  </button>
+                )}
               </div>
 
               <CheckoutAddressCard
@@ -491,24 +500,24 @@ export function Checkout() {
               <div className="grid gap-3 sm:grid-cols-2">
                 {[
                   {
-                    id: 'cod' as const,
-                    title: 'Thanh toán khi nhận hàng (COD)',
-                    desc: 'Kiểm tra hàng rồi thanh toán tiền mặt trực tiếp cho shipper GHN',
-                    badge: 'Mặc định · Tiền mặt',
-                    badgeColor: 'bg-lime-400/20 text-lime-300 border-lime-400/30',
-                    iconBg: 'bg-lime-400 text-slate-950',
-                    icon: Wallet,
-                  },
-                  {
                     id: 'momo' as const,
                     title: 'Thanh toán qua Ví MoMo / Thẻ ATM',
                     desc: 'Cổng thanh toán MoMo & Thẻ ATM nội địa (NAPAS) - không yêu cầu mã CVC',
-                    badge: 'Ví điện tử MoMo',
+                    badge: 'Khuyên dùng',
                     badgeColor: 'bg-pink-500/20 text-pink-300 border-pink-500/30',
                     iconBg: 'bg-gradient-to-br from-[#A50064] to-[#D82D8B] text-white',
                     customIcon: (
                       <span className="font-black text-sm tracking-tighter">MoMo</span>
                     ),
+                  },
+                  {
+                    id: 'cod' as const,
+                    title: 'Thanh toán khi nhận hàng (COD)',
+                    desc: 'Kiểm tra hàng rồi thanh toán tiền mặt trực tiếp cho shipper GHN',
+                    badge: 'Tiền mặt',
+                    badgeColor: 'bg-lime-400/20 text-lime-300 border-lime-400/30',
+                    iconBg: 'bg-lime-400 text-slate-950',
+                    icon: Wallet,
                   },
                 ].map((item) => {
                   const isSelected = paymentMethod === item.id
@@ -595,7 +604,7 @@ export function Checkout() {
                     </p>
                   </div>
                   <span className="font-mono text-xs font-black text-lime-300 shrink-0">
-                    {formatVND(item.price * item.quantity)}
+                    {(item.price * item.quantity).toLocaleString('vi-VN')}đ
                   </span>
                 </div>
               ))}
@@ -646,7 +655,7 @@ export function Checkout() {
               <div className="flex justify-between text-slate-400">
                 <span>Tạm tính</span>
                 <span className="font-mono text-white font-bold">
-                  {formatVND(cartSubtotal)}
+                  {cartSubtotal.toLocaleString('vi-VN')}đ
                 </span>
               </div>
 
@@ -654,7 +663,7 @@ export function Checkout() {
                 <div className="flex justify-between font-semibold text-emerald-400">
                   <span>Giảm giá Voucher ({appliedCoupon?.code})</span>
                   <span className="font-mono">
-                    -{formatVND(discountAmount)}
+                    -{discountAmount.toLocaleString('vi-VN')}đ
                   </span>
                 </div>
               )}
@@ -675,7 +684,7 @@ export function Checkout() {
                     <span className="text-lime-300 font-bold">Miễn phí (Freeship)</span>
                   ) : (
                     <span className="text-white">
-                      {formatVND(effectiveShippingFee)}
+                      {effectiveShippingFee.toLocaleString('vi-VN')}đ
                     </span>
                   )}
                 </span>
@@ -684,7 +693,7 @@ export function Checkout() {
               <div className="flex justify-between border-t border-white/10 pt-3 text-base">
                 <span className="font-black text-white">Tổng thanh toán</span>
                 <b className="font-mono text-xl font-black text-lime-300">
-                  {formatVND(finalCalculatedTotal)}
+                  {finalCalculatedTotal.toLocaleString('vi-VN')}đ
                 </b>
               </div>
             </div>

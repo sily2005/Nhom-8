@@ -1,4 +1,4 @@
-import api from './api'
+import api from './api.js'
 
 export interface GHNProvince {
   ProvinceID: number
@@ -108,7 +108,7 @@ export function normalizeVietnameseLocation(name: string): string {
     .normalize('NFC')
     .toLowerCase()
     .replace(/^(tỉnh|thành phố|tp\.|tp|quận|q\.|q|huyện|h\.|h|thị xã|tx\.|tx|phường|p\.|p|xã|thị trấn|tt\.|tt)\s*/gi, '')
-    .replace(/[.,\-_]/g, ' ')
+    .replace(/[\.,\-_]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim()
 }

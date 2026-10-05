@@ -1,4 +1,4 @@
-import api from './api'
+import api from './api.js'
 import type { Review } from '../types'
 
 /** Map DB review fields → frontend Review type */

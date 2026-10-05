@@ -4,7 +4,6 @@ import { motion } from 'framer-motion'
 import { ShoppingBag, Star, Check } from 'lucide-react'
 import { useApp } from '../context/AppContext'
 import type { Product } from '../types'
-import { formatVND } from '../utils'
 
 interface ProductCardProps {
   product: Product
@@ -27,6 +26,9 @@ export function ProductCard({ product, className = '' }: ProductCardProps) {
     setAdded(true)
     setTimeout(() => setAdded(false), 1500)
   }
+
+  const formatCurrency = (val: number) =>
+    new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(val)
 
   const discountPercent =
     product.oldPrice && product.oldPrice > product.price
@@ -94,10 +96,10 @@ export function ProductCard({ product, className = '' }: ProductCardProps) {
         {/* Price & Action */}
         <div className="flex items-end justify-between pt-1">
           <div className="flex flex-col">
-            <span className="text-base font-black text-white">{formatVND(product.price)}</span>
+            <span className="text-base font-black text-white">{formatCurrency(product.price)}</span>
             {product.oldPrice && product.oldPrice > product.price && (
               <span className="text-[11px] text-slate-500 line-through">
-                {formatVND(product.oldPrice)}
+                {formatCurrency(product.oldPrice)}
               </span>
             )}
           </div>

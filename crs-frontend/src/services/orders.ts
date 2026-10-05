@@ -1,4 +1,4 @@
-import api from './api'
+import api from './api.js'
 import type { Order, OrderItem } from '../types'
 
 export interface CreateOrderPayload {
@@ -47,13 +47,9 @@ export async function createOrder(payload: CreateOrderPayload) {
   }
 }
 
-export async function getMomoPayUrl(orderId: number | string, amount?: number, orderCode?: string): Promise<string | null> {
+export async function getMomoPayUrl(orderId: number | string, amount?: number): Promise<string | null> {
   try {
-    const response = await api.post('/payment/momo/start', {
-      order_id: orderId,
-      amount: amount && amount > 0 ? amount : 50000,
-      order_code: orderCode || String(orderId),
-    })
+    const response = await api.post('/payment/momo/start', { order_id: Number(orderId), amount: amount ?? 50000 })
     return response.data?.data?.pay_url ?? response.data?.pay_url ?? null
   } catch (error: any) {
     if (error?.response?.data?.errors) {
@@ -68,15 +64,6 @@ export async function fetchOrders(userId?: number) {
   if (userId) params.user_id = userId
   const response = await api.get('/orders', { params })
   return response.data?.data ?? response.data
-}
-
-export async function fetchSalesSummary(): Promise<Record<number, number>> {
-  try {
-    const response = await api.get('/orders/sales-summary')
-    return response.data?.data ?? response.data ?? {}
-  } catch {
-    return {}
-  }
 }
 
 export async function fetchAdminOrders(params?: { status?: string; search?: string; page?: number; per_page?: number }) {

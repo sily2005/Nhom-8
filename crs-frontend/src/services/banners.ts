@@ -1,4 +1,4 @@
-import api from './api'
+import api from './api.js'
 import type { BannerSlide } from '../types'
 
 export async function fetchBanners(params: Record<string, string | number | boolean> = {}): Promise<BannerSlide[]> {
