@@ -45,9 +45,9 @@ Route::patch('/coupons/{id}/toggle', [CouponController::class, 'toggleActive']);
 
 // Shipping & GHN Logistics
 Route::post('/shipping/fee', [ShippingController::class, 'calculateFee']);
-Route::get('/shipping/provinces', [ShippingController::class, 'getProvinces']);
-Route::get('/shipping/districts', [ShippingController::class, 'getDistricts']);
-Route::get('/shipping/wards', [ShippingController::class, 'getWards']);
+Route::get('/shipping/provinces', [ShippingController::class, 'provinces']);
+Route::get('/shipping/districts', [ShippingController::class, 'districts']);
+Route::get('/shipping/wards', [ShippingController::class, 'wards']);
 
 // Reviews
 Route::get('/reviews', [ReviewController::class, 'index']);
