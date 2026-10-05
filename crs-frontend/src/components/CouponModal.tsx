@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Check, Copy, Sparkles, Tag, Ticket, X } from 'lucide-react'
 import { toast } from 'sonner'
@@ -128,10 +129,10 @@ export function CouponModal({ isOpen, onClose, onSelectCoupon }: CouponModalProp
     setTimeout(() => setCopiedCode(null), 2500)
   }
 
-  return (
+  const modalContent = (
     <AnimatePresence>
       {isOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6">
+        <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 sm:p-6">
           {/* Backdrop */}
           <motion.div
             initial={{ opacity: 0 }}
@@ -339,4 +340,7 @@ export function CouponModal({ isOpen, onClose, onSelectCoupon }: CouponModalProp
       )}
     </AnimatePresence>
   )
+
+  if (typeof document === 'undefined') return null
+  return createPortal(modalContent, document.body)
 }
