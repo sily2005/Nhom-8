@@ -1,5 +1,5 @@
 # Free all microservices and frontend ports if held by old background processes
-$env:PHP_CLI_SERVER_WORKERS = 4
+$env:PHP_CLI_SERVER_WORKERS = 8
 $ports = @(8000, 8001, 8002, 8003, 8004, 5173)
 foreach ($port in $ports) {
     $connections = Get-NetTCPConnection -LocalPort $port -ErrorAction SilentlyContinue
