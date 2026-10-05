@@ -42,6 +42,16 @@ export function CartDrawer() {
   const [couponModalOpen, setCouponModalOpen] = useState(false)
   const navigate = useNavigate()
 
+  const handleOpenCoupons = () => {
+    setCartDrawerOpen(false)
+    setCouponModalOpen(true)
+  }
+
+  const handleCloseCoupons = () => {
+    setCouponModalOpen(false)
+    setCartDrawerOpen(true)
+  }
+
   const handleCheckout = () => {
     setCartDrawerOpen(false)
     if (!user) {
@@ -309,8 +319,9 @@ export function CartDrawer() {
                         </button>
                       )}
                       <button
-                        onClick={() => setCouponModalOpen(true)}
-                        className="rounded-lg bg-lime-400/20 px-2.5 py-1 font-bold text-lime-300 hover:bg-lime-400/30 text-[11px]"
+                        type="button"
+                        onClick={handleOpenCoupons}
+                        className="rounded-lg bg-lime-400/20 px-2.5 py-1 font-bold text-lime-300 hover:bg-lime-400/30 text-[11px] cursor-pointer"
                       >
                         {appliedCoupon ? 'Đổi mã' : 'Chọn Voucher'}
                       </button>
@@ -366,7 +377,8 @@ export function CartDrawer() {
       {/* Coupon Modal */}
       <CouponModal
         isOpen={couponModalOpen}
-        onClose={() => setCouponModalOpen(false)}
+        onClose={handleCloseCoupons}
+        onSelectCoupon={handleCloseCoupons}
       />
     </>
   )
