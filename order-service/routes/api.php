@@ -51,4 +51,6 @@ Route::get('/shipping/wards', [ShippingController::class, 'getWards']);
 
 // Reviews
 Route::get('/reviews', [ReviewController::class, 'index']);
+Route::get('/reviews/summary', [ReviewController::class, 'summary']);
+Route::get('/reviews/check', [ReviewController::class, 'check']);
 Route::post('/reviews', [ReviewController::class, 'store']);

@@ -94,6 +94,7 @@ class GatewayController extends Controller
         if (
             str_starts_with($path, 'auth') ||
             str_starts_with($path, 'users') ||
+            str_starts_with($path, 'addresses') ||
             str_starts_with($path, 'messages') ||
             str_starts_with($path, 'admin/conversations')
         ) {

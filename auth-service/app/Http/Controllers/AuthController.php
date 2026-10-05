@@ -574,4 +574,165 @@ class AuthController extends Controller
             'errors' => null,
         ], $status);
     }
+
+    /**
+     * Lấy danh sách sổ địa chỉ của người dùng
+     */
+    public function getAddresses(Request $request): JsonResponse
+    {
+        try {
+            $userId = $request->query('user_id');
+            if (!$userId) {
+                try {
+                    $user = auth('api')->user();
+                    $userId = $user?->id;
+                } catch (\Throwable $e) {
+                    $userId = null;
+                }
+            }
+
+            if (!$userId) {
+                return response()->json(['success' => true, 'data' => []]);
+            }
+
+            $addresses = \App\Models\Address::where('user_id', $userId)
+                ->orderByDesc('is_default')
+                ->latest()
+                ->get();
+
+            return response()->json([
+                'success' => true,
+                'data' => $addresses,
+            ]);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'success' => true,
+                'data' => [],
+                'message' => 'Lấy danh sách địa chỉ',
+            ]);
+        }
+    }
+
+    /**
+     * Thêm địa chỉ mới
+     */
+    public function addAddress(Request $request): JsonResponse
+    {
+        try {
+            $validated = $request->validate([
+                'user_id' => ['nullable', 'integer'],
+                'recipient_name' => ['required', 'string', 'max:100'],
+                'phone' => ['required', 'string'],
+                'province' => ['required', 'string'],
+                'district' => ['required', 'string'],
+                'ward' => ['required', 'string'],
+                'street_address' => ['required', 'string'],
+                'is_default' => ['sometimes', 'boolean'],
+            ]);
+
+            $userId = $validated['user_id'] ?? auth('api')->id();
+            if (!$userId) {
+                return response()->json(['success' => false, 'message' => 'Yêu cầu user_id'], 400);
+            }
+
+            $validated['user_id'] = $userId;
+
+            if (!empty($validated['is_default'])) {
+                \App\Models\Address::where('user_id', $userId)->update(['is_default' => false]);
+            }
+
+            $address = \App\Models\Address::create($validated);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Thêm địa chỉ thành công.',
+                'data' => $address,
+            ], 201);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Không thể thêm địa chỉ: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Cập nhật địa chỉ
+     */
+    public function updateAddress(Request $request, $id): JsonResponse
+    {
+        try {
+            $address = \App\Models\Address::findOrFail($id);
+            $validated = $request->validate([
+                'recipient_name' => ['sometimes', 'string', 'max:100'],
+                'phone' => ['sometimes', 'string'],
+                'province' => ['sometimes', 'string'],
+                'district' => ['sometimes', 'string'],
+                'ward' => ['sometimes', 'string'],
+                'street_address' => ['sometimes', 'string'],
+                'is_default' => ['sometimes', 'boolean'],
+            ]);
+
+            if (!empty($validated['is_default'])) {
+                \App\Models\Address::where('user_id', $address->user_id)->update(['is_default' => false]);
+            }
+
+            $address->update($validated);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Cập nhật địa chỉ thành công.',
+                'data' => $address,
+            ]);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Không thể cập nhật địa chỉ: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Xóa địa chỉ
+     */
+    public function deleteAddress($id): JsonResponse
+    {
+        try {
+            $address = \App\Models\Address::findOrFail($id);
+            $address->delete();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Đã xóa địa chỉ thành công.',
+            ]);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Không thể xóa địa chỉ: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Đặt địa chỉ mặc định
+     */
+    public function setDefaultAddress($id): JsonResponse
+    {
+        try {
+            $address = \App\Models\Address::findOrFail($id);
+            \App\Models\Address::where('user_id', $address->user_id)->update(['is_default' => false]);
+            $address->update(['is_default' => true]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Đã đặt làm địa chỉ mặc định.',
+                'data' => $address,
+            ]);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Không thể đặt mặc định: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
 }

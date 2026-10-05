@@ -41,6 +41,13 @@ Route::get('/users', [AuthController::class, 'getUsers']);
 Route::get('/users/{id}', [AuthController::class, 'getUserDetail']);
 Route::patch('/users/{id}/status', [AuthController::class, 'toggleStatus']);
 
+// Direct addresses routes
+Route::get('/addresses', [AuthController::class, 'getAddresses']);
+Route::post('/addresses', [AuthController::class, 'addAddress']);
+Route::put('/addresses/{id}', [AuthController::class, 'updateAddress']);
+Route::delete('/addresses/{id}', [AuthController::class, 'deleteAddress']);
+Route::patch('/addresses/{id}/default', [AuthController::class, 'setDefaultAddress']);
+
 // Customer & Admin Live Chat
 Route::get('/messages', [ChatController::class, 'getMessages']);
 Route::post('/messages', [ChatController::class, 'sendMessage']);
