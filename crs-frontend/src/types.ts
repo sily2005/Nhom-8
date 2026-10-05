@@ -132,6 +132,9 @@ export type User = {
 
 export type Order = {
   id: string
+  orderCode?: string
+  order_code?: string
+  order_number?: string
   date: string
   status: OrderStatus
   paymentStatus: PaymentStatus
