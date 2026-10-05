@@ -139,7 +139,7 @@ export function CouponModal({ isOpen, onClose, onSelectCoupon }: CouponModalProp
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={onClose}
-            className="fixed inset-0 bg-[#0B0E17]/85 backdrop-blur-md"
+            className="fixed inset-0 z-[99998] bg-black/85 backdrop-blur-md"
           />
 
           {/* Modal Box */}
@@ -148,7 +148,7 @@ export function CouponModal({ isOpen, onClose, onSelectCoupon }: CouponModalProp
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.94, y: 15 }}
             transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-            className="relative z-10 flex max-h-[88vh] w-full max-w-xl flex-col overflow-hidden rounded-3xl border border-white/10 bg-[#131823] text-white shadow-2xl"
+            className="relative z-[99999] flex max-h-[88vh] w-full max-w-xl flex-col overflow-hidden rounded-3xl border border-white/10 bg-[#131823] text-white shadow-2xl"
           >
             {/* Modal Header */}
             <div className="flex items-center justify-between border-b border-white/10 px-6 py-5">

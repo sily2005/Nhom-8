@@ -70,7 +70,7 @@ export function CartDrawer() {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               onClick={() => setCartDrawerOpen(false)}
-              className="fixed inset-0 z-[60] bg-[#0B0E17]/80 backdrop-blur-sm"
+              className="fixed inset-0 z-50 bg-[#0B0E17]/80 backdrop-blur-sm"
             />
 
             {/* Slide-out Drawer */}
@@ -79,7 +79,7 @@ export function CartDrawer() {
               animate={{ x: 0 }}
               exit={{ x: '100%' }}
               transition={{ type: 'spring', damping: 28, stiffness: 260 }}
-              className="fixed right-0 top-0 z-[60] flex h-full w-full max-w-md flex-col border-l border-white/10 bg-[#131823] p-6 text-white shadow-2xl"
+              className="fixed right-0 top-0 z-50 flex h-full w-full max-w-md flex-col border-l border-white/10 bg-[#131823] p-6 text-white shadow-2xl"
             >
 
               {/* Header */}
